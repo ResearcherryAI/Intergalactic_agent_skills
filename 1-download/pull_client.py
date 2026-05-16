@@ -8,7 +8,7 @@ pull_client.py — подтянуть клиента после оплаты в 
      `chart.csv` — натальную карту, посчитанную фронтом в скрытом
      iframe.
   2. Скрипт идёт в Drive, находит папки с `chart.csv` и скачивает
-     их локально в `D:\DariaGalactic\Профайлы клиентов\<Имя>_<contract12>_<YYYYMMDD>\`.
+     их локально в `D:\DariaGalactic\Профайлы клиентов\Купившие разбор\<Имя>_<contract12>_<YYYYMMDD>\`.
 
 Два режима запуска:
 
@@ -99,7 +99,7 @@ GDRIVE_FOLDER_ID = os.environ.get('GDRIVE_FOLDER_ID', '')
 
 DEFAULT_LOCAL_ROOT = Path(os.environ.get(
     'CLIENT_PROFILES_DIR',
-    os.environ.get('MISSION_LOCAL_DIR', r'D:\DariaGalactic\Профайлы клиентов'),
+    os.environ.get('MISSION_LOCAL_DIR', r'D:\DariaGalactic\Профайлы клиентов\Купившие разбор'),
 ))
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -660,15 +660,13 @@ def run_all(args):
     # ШАГ 3: Определяем, какие клиенты уже скачаны локально
     local_contracts = set()
     local_root = Path(out_root)
-    for subdir in ['Купившие разбор', '']:
-        check_dir = local_root / subdir if subdir else local_root
-        if check_dir.exists():
-            for d in check_dir.iterdir():
-                if d.is_dir():
-                    for part in d.name.split('_'):
-                        clean = re.sub(r'[^A-Za-z0-9]', '', part)
-                        if len(clean) >= 10:
-                            local_contracts.add(clean)
+    if local_root.exists():
+        for d in local_root.iterdir():
+            if d.is_dir():
+                for part in d.name.split('_'):
+                    clean = re.sub(r'[^A-Za-z0-9]', '', part)
+                    if len(clean) >= 10:
+                        local_contracts.add(clean)
 
     # ШАГ 4: Фильтруем — только «В разборе» И ещё не скачаны локально
     matched = []
