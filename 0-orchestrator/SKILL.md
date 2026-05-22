@@ -57,11 +57,13 @@ description: Оркестратор сквозного процесса разб
                               до 2 итераций; HARD FAIL → возврат на ШАГ 2
 ШАГ 3a: Verify Aspects      → python .cursor/skills/3-validation/verify_aspects.py "<папка>"
                               exit 0 = OK, exit 1 = выдуманные аспекты → СТОП → ШАГ 2
-ШАГ 3b: Benchmark           → python .cursor/skills/3-validation/benchmark.py "<v2.md>" "Top1,Top2,Top3"
+ШАГ 3b: Benchmark           → python .cursor/skills/3-validation/benchmark.py "<v2.md>" "Top1,Top2,Top3" --json
                               цель score ≥ 0.90 (≥29 из 31)
                               сохранить benchmark_report.md В ПАПКУ КЛИЕНТА (raw vs v2, fails)
-                              score < 0.90 → дорабатывать v2 → перезапуск
-ШАГ 3c: Daria Review        → передать v2 + benchmark_report.md Дарье
+                              score < 0.90 → дорабатывать v2 (по карте правок 2-analysis) → перезапуск
+ШАГ 3c: Compare & Review    → python .cursor/skills/3-validation/compare_versions.py "<папка>"
+                              создаёт changes_report.md (что именно Кайя поменяла)
+                              передать v2 + benchmark_report.md + changes_report.md Дарье
                               ждать явного одобрения «можно отправлять [имя]»
 ШАГ 4: Parallel Gate        → 4a: Image (SKILL: 4-image) + 4b: PDF — параллельно, по v2
 ШАГ 5: Pre-delivery Check   → комплектность папки (v2.md, summary.md, image, pdf)
@@ -75,6 +77,25 @@ description: Оркестратор сквозного процесса разб
 3. **v2 ≠ переписать заново.** Это точечные StrReplace для HARD FAIL пунктов
 4. **Бенчмарк ≥ 0.90 — гейт для передачи Дарье.** При <0.90 — дорабатывать до прохода
 5. **Ошибки в `benchmark_report.md` папки клиента** — компактно, не в общий `pipeline_errors.md`
+
+### 🚦 Поведение оркестратора по score raw AI-разбора
+
+После первого прогона `benchmark.py --json` для raw файла агента:
+
+| Score raw | Что делает оркестратор |
+|---|---|
+| **≥ 0.90** | минимум правок: `make_v2.py` → пара точечных доработок → бенчмарк → Дарья |
+| **0.70 – 0.89** | стандартный путь: `make_v2.py` (автоправки E1/E2/B2/B3/E6) → ручные правки по карте правок → бенчмарк → Дарья |
+| **0.50 – 0.69** | глубокая доработка: автоправки + переработка Топ-3, теней, профессий; ожидаемое время — в 2-3 раза дольше; информировать Дарью «AI-выход слабый, нужно много правок» |
+| **< 0.50** | **СТОП.** Не дорабатывать. Записать в `pipeline_errors_mission.md` причину (промпт агента сбойнул / CSV битый / нестандартный клиент). Уведомить Дарью с предложением: <br>1) переписать с нуля по `2-analysis` (без AI основы) <br>2) или вернуть в очередь агента: `POST /admin/trigger {contract, product: mission}` (Worker сбросит KV и перезапустит n8n) |
+
+### 🔧 Внутренний инструмент: `make_v2.py`
+
+```
+python .cursor/skills/2-analysis/make_v2.py "<папка_клиента>"
+```
+
+Клонирует raw → v2 и применяет автоматические правки (E1 «бесплатно», E2 Vimshottari, B2 Лачинова→Кайя, B3 ссылка на книгу, E6 TIER/orb токены). Смысловые правки (Топ-3, тени, профессии, аспекты) — вручную по карте правок из `2-analysis/SKILL.md`.
 
 Лог ошибок: `.cursor/Логи ошибок/pipeline_errors_mission.md`
 Логи отдельных клиентов: `<папка_клиента>/benchmark_report.md` + `DariaGalactic/Правила/Логи/<клиент>.md`
@@ -190,8 +211,10 @@ read SKILL 1-download (точечный, если нужно) → read SKILL 2-m
 | Шаг | Скрипт | Расположение |
 |---|---|---|
 | 1 | `pull_client.py` | `.cursor/skills/1-download/` |
+| 2 | `make_v2.py` | `.cursor/skills/2-analysis/` |
 | 3a | `verify_aspects.py` | `.cursor/skills/3-validation/` |
-| 3b | `benchmark.py` | `.cursor/skills/3-validation/` |
+| 3b | `benchmark.py` | `.cursor/skills/3-validation/` (флаг `--json` для машинного вывода) |
+| 3c | `compare_versions.py` | `.cursor/skills/3-validation/` (diff raw vs v2) |
 | 4b | `generate_pdf.py` | `.cursor/skills/5-pdf/` |
 | 6 | `deliver_mission.py` | `.cursor/skills/6-delivery/` |
 

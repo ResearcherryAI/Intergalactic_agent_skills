@@ -97,12 +97,27 @@ rclone copy "<папка_клиента>/<Имя>_миссия.pdf" "gdrive:Dari
 
 ## Git commit после успешной доставки
 
-После каждой успешной доставки — commit (БЕЗ push):
+**Раздельные коммиты — raw (AI-снапшот) и v2 (правки Кайи).** Это нужно для аудита: всегда видно, что писал агент и что дорабатывала Кайя.
+
 ```powershell
 cd "D:\DariaGalactic\Профайлы клиентов"
-git add "<папка_клиента>/*.md" "<папка_клиента>/*.csv"
-git commit -m "[delivery] <Имя> <DDMMYYYY> — миссия готова"
+
+# 1) Снапшот AI-выхода (raw от агента) — отдельный коммит
+git add "<папка_клиента>/<Имя>_<DDMMYYYY>_миссия.md"
+git add "<папка_клиента>/karta_*.csv"
+git commit -m "[ai-snapshot] <Имя> <DDMMYYYY> — raw разбор от intergalactic-agent"
+
+# 2) Доработка Кайи (v2 + benchmark_report + summary + image)
+git add "<папка_клиента>/<Имя>_<DDMMYYYY>_миссия_v2.md"
+git add "<папка_клиента>/benchmark_report.md"
+git add "<папка_клиента>/summary.md"
+git commit -m "[v2-edits] <Имя> <DDMMYYYY> — доработка Кайи, score X.XX"
+
+# 3) Доставка (статус ready, ссылки в Sheet)
+git commit --allow-empty -m "[delivery] <Имя> <DDMMYYYY> — миссия выдана клиенту"
 ```
+
+Если raw уже был закоммичен при первом pull-е — пропустить шаг 1.
 
 Git push выполняется ОДИН РАЗ в конце сессии через оркестратор (ШАГ 7).
 

@@ -273,10 +273,37 @@ def benchmark(markdown: str, *, expected_top: list[str] | None = None) -> dict[s
 
 if __name__ == "__main__":
     import sys
-    md = open(sys.argv[1], encoding="utf-8").read() if len(sys.argv) > 1 else open("ref_svetlana.md", encoding="utf-8").read()
-    expected = sys.argv[2].split(",") if len(sys.argv) > 2 else ["Телец", "Великий Аттрактор", "Дракон"]
+    import json
+
+    args = [a for a in sys.argv[1:] if a]
+    as_json = False
+    if "--json" in args:
+        as_json = True
+        args.remove("--json")
+
+    md_path = args[0] if args else "ref_svetlana.md"
+    md = open(md_path, encoding="utf-8").read()
+    expected = args[1].split(",") if len(args) > 1 else ["Телец", "Великий Аттрактор", "Дракон"]
+
     result = benchmark(md, expected_top=expected)
+
+    if as_json:
+        # Машинный вывод для оркестратора: только JSON, ничего лишнего.
+        out = {
+            "score": result["score"],
+            "passed": result["passed"],
+            "total": result["total"],
+            "fails": result["fails"],
+            "stats": result["stats"],
+            "input_file": md_path,
+            "expected_top": expected,
+        }
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+        sys.exit(0 if result["score"] >= 0.90 else 1)
+
+    # Человеческий вывод по умолчанию.
     print(f"Score: {result['score'] * 100:.2f}% ({result['passed']}/{result['total']})")
     print(f"Lines: {result['stats']['lines']}")
     print(f"Book mentions: {result['stats']['book_mentions']}")
     print(f"Fails: {result['fails']}")
+    sys.exit(0 if result["score"] >= 0.90 else 1)
