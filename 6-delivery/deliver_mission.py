@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""
+"""
 deliver_mission.py — выкатить готовый разбор миссии в личный кабинет клиента.
 
 ОБЯЗАТЕЛЬНО перед запуском прочитай раздел «Что НЕ делать» в
@@ -7,7 +7,7 @@ deliver_mission.README.md. Было 3 инцидента, когда отпра�
 на чужой email («из памяти» / по похожему имени) — теперь скрипт
 блокирует такое поведение интерактивным подтверждением.
 
-Принимает папку клиента вида `D:\DariaGalactic\Профайлы клиентов\<Имя_contract_дата>\`. Внутри ищет:
+Принимает папку клиента вида `Профайлы клиентов/<Имя_contract_дата>/`. Внутри ищет:
   • <что-то>_миссия.pdf      — полный разбор (загружается в Drive)
   • Generated_image.png      — обложка-визуализация (грузится в Drive в полном размере
                                и в R2 в виде сжатого WebP для кабинета)
@@ -28,7 +28,7 @@ deliver_mission.README.md. Было 3 инцидента, когда отпра�
 
 Пример:
     python3 deliver_mission.py marianna@example.com \\
-        "D:\\DariaGalactic\\Профайлы клиентов\\Марианна_on1778267701_20260508"
+        "/Users/kirill/.../Профайлы клиентов/Марианна_on1778267701_20260508"
 
 Флаги:
     --yes / -y   пропустить интерактивное подтверждение (только когда
@@ -40,7 +40,8 @@ deliver_mission.README.md. Было 3 инцидента, когда отпра�
 
 Конфиги (всё в DariaGalactic/config — папка в .gitignore):
   • client_secret_*.json — OAuth Desktop app из Google Cloud Console.
-  • .env с WORKER_URL, ADMIN_SECRET, GDRIVE_FOLDER_ID.
+  • .env с WORKER_URL, ADMIN_SECRET, GDRIVE_FOLDER_ID,
+    CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_R2_BUCKET, CLOUDFLARE_R2_TOKEN.
   • gdrive_token.json создаётся автоматически после первой авторизации.
 
 Установка зависимостей (один раз):
@@ -65,15 +66,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PRODUCTY_ROOT = Path(os.environ.get(
-    'PRODUCTY_ROOT',
-    str(Path.home() / 'Desktop' / 'Producty')
-))
-CONFIG_DIR = PRODUCTY_ROOT / 'DariaGalactic' / 'config'
-DEFAULT_CLIENT_PROFILES_DIR = Path(os.environ.get(
-    'CLIENT_PROFILES_DIR',
-    os.environ.get('MISSION_LOCAL_DIR', r'D:\DariaGalactic\Профайлы клиентов'),
-))
+AGENT_DIR = SCRIPT_DIR.parent  # intergalacticAstoAgent/
+CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
 
 try:
     from dotenv import load_dotenv
@@ -91,6 +85,7 @@ GDRIVE_FOLDER_ID = os.environ.get('GDRIVE_FOLDER_ID', '')
 
 CF_ACCOUNT_ID = os.environ.get('CLOUDFLARE_ACCOUNT_ID', '')
 CF_R2_BUCKET = os.environ.get('CLOUDFLARE_R2_BUCKET', 'mission-content')
+CF_R2_TOKEN = os.environ.get('CLOUDFLARE_R2_TOKEN', '')
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 TOKEN_FILE = CONFIG_DIR / 'gdrive_token.json'
@@ -174,30 +169,41 @@ def short_contract(cid: str) -> str:
     return re.sub(r'[^A-Za-z0-9]+', '', cid)[-12:].lstrip('-') or 'unknown'
 
 
-# ── Lookup клиента в Google Sheet ────────────────────────────────────
+# ── Lookup клиента в Google Sheet по email ──────────────────────────
 #
-# contractId — ПЕРВИЧНЫЙ ключ. Извлекается из имени папки клиента
-# (суффикс 12 hex-символов). Email — fallback, если contractId
-# не найден или не передан.
-#
-# При нескольких строках на одном email без contractId:
-# 1) строка без folderUrl (ещё не привязана), 2) самая свежая.
-
-def _parse_all_mission_rows(sheets) -> list[dict]:
-    """Читает Sheet один раз и возвращает все строки с продуктом «миссия»."""
+# Возвращает {sheetRow, contractId, buyerName, dateHuman, purchasedAt,
+# folderUrl, phone} либо None. Для миссий, у которых в Sheet 2+ строк (на
+# одном email несколько контрактов), берёт первую с непустым D
+# («Анализ миссии…») и пустым O («Папка клиента») — то есть ту, для
+# которой папка ещё не привязана. Если все привязаны — берёт самую
+# свежую по A-колонке (timestamp).
+def lookup_sheet_row_for_mission(sheets, email: str, contract_hint: str = '',
+                                 product_code: str = 'mission') -> dict | None:
+    """FIX-28: фильтруем строки Sheet по `productCode`.
+       mission → строки с D содержащим «миссия/миссии»;
+       money_dna → строки с D содержащим «архитектур»/«50.56»/«денег».
+    """
     if not sheets:
-        return []
+        return None
+    if product_code == 'money_dna':
+        product_keywords = ('архитектур', 'денег', '50.56')
+    else:
+        product_keywords = ('миссия', 'миссии')
+
+    # P = Телефон (WhatsApp). Range расширен до A:P, чтобы вытянуть phone.
     res = sheets.spreadsheets().values().get(
         spreadsheetId=SHEET_ID, range=f'{SHEET_TAB}!A1:P300',
     ).execute()
     rows = res.get('values', [])
-    result = []
-    for i, r in enumerate(rows[1:], start=2):
+    candidates = []
+    for i, r in enumerate(rows[1:], start=2):  # skip header (row 1)
         cols = (r + [''] * 16)[:16]
-        product = (cols[3] or '').lower()
-        if 'миссия' not in product and 'миссии' not in product:
+        if (cols[1] or '').strip().lower() != email.strip().lower():
             continue
-        result.append({
+        product_cell = (cols[3] or '').lower()
+        if not any(k in product_cell for k in product_keywords):
+            continue
+        candidates.append({
             'sheetRow': i,
             'datetime': cols[0],
             'email': cols[1],
@@ -216,55 +222,19 @@ def _parse_all_mission_rows(sheets) -> list[dict]:
             'folderUrl': cols[14],
             'phone': cols[15],
         })
-    return result
-
-
-def extract_contract_from_folder(folder_name: str) -> str:
-    """Извлекает 12-символьный contractId суффикс из имени папки."""
-    m = re.search(r'_([0-9a-f]{12})_\d{8}$', folder_name)
-    return m.group(1) if m else ''
-
-
-def lookup_sheet_row_for_mission(sheets, email: str, contract_hint: str = '') -> dict | None:
-    all_rows = _parse_all_mission_rows(sheets)
-    if not all_rows:
-        return None
-
-    # 1) Первичный поиск: по contractId (суффикс 12 символов)
-    if contract_hint:
-        for r in all_rows:
-            cid = (r['contractId'] or '').strip()
-            if cid.endswith(contract_hint) or contract_hint in cid:
-                return r
-
-    # 2) Fallback: по email
-    candidates = [r for r in all_rows
-                  if (r['email'] or '').strip().lower() == email.strip().lower()]
     if not candidates:
         return None
-
-    if len(candidates) > 1:
-        print(f'   ⚠️  Найдено {len(candidates)} строк на email {email}:')
+    if contract_hint:
         for c in candidates:
-            print(f'      row {c["sheetRow"]}: {c["buyerName"]} / {short_contract(c["contractId"])}')
-
+            if (c['contractId'] or '').strip() == contract_hint.strip():
+                return c
+    # 1) сначала строка без folderUrl
     for c in candidates:
         if not c['folderUrl']:
             return c
+    # 2) иначе — самая свежая по datetime (col A)
     candidates.sort(key=lambda c: c['datetime'], reverse=True)
     return candidates[0]
-
-
-def lookup_sheet_row_by_query(sheets, query: str) -> list[dict]:
-    """Поиск по любому полю: имя, email, contractId, дата рождения."""
-    all_rows = _parse_all_mission_rows(sheets)
-    q = query.strip().lower()
-    results = []
-    for r in all_rows:
-        searchable = '|'.join(str(v) for v in r.values()).lower()
-        if q in searchable:
-            results.append(r)
-    return results
 
 
 # ── Защита от инцидентов отправки (см. README раздел «Что НЕ делать»)
@@ -290,10 +260,6 @@ def confirm_client_dispatch(email: str, sheet_info: dict | None,
         print(f'  contractId              : {sheet_info.get("contractId") or "—"}')
         print(f'  Телефон (col P)         : {sheet_info.get("phone") or "—"}')
         print(f'  Папка локально          : {client_dir.name}')
-        folder_name_part = client_dir.name.split('_')[0].lower()
-        sheet_name_part = (sheet_info.get('buyerName') or '').strip().lower()
-        if sheet_name_part and folder_name_part and sheet_name_part != folder_name_part:
-            print(f'  ⚠️  ВНИМАНИЕ: имя в Sheet ({sheet_info["buyerName"]}) ≠ имя в папке ({client_dir.name.split("_")[0]})')
         if not same:
             sys.exit(
                 'СТОП: email в Sheet не совпадает с переданным аргументом. '
@@ -552,23 +518,31 @@ def make_cover_webp(src_path: Path) -> bytes:
     return buf.getvalue()
 
 
-# ── R2 upload (через Worker /admin/r2/put) ───────────────────────────
+# ── R2 upload ────────────────────────────────────────────────────────
 def r2_put(key: str, body: bytes, content_type: str) -> None:
-    if not ADMIN_SECRET:
-        sys.exit('ADMIN_SECRET не задан в .env — невозможно загрузить в R2.')
-    r = requests.post(
-        WORKER_URL.rstrip('/') + '/admin/r2/put',
+    if not (CF_ACCOUNT_ID and CF_R2_TOKEN and CF_R2_BUCKET):
+        sys.exit(
+            'CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_R2_TOKEN / CLOUDFLARE_R2_BUCKET '
+            'не заданы в .env.'
+        )
+    url = (
+        f'https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}'
+        f'/r2/buckets/{CF_R2_BUCKET}/objects/{key}'
+    )
+    r = requests.put(
+        url,
         headers={
-            'X-Admin-Key': ADMIN_SECRET,
-            'X-R2-Key': key,
-            'X-R2-Content-Type': content_type,
+            'Authorization': f'Bearer {CF_R2_TOKEN}',
+            'Content-Type': content_type,
         },
         data=body,
         timeout=60,
     )
     if r.status_code != 200:
-        sys.exit(f'R2 PUT {key} — HTTP {r.status_code}: {r.text[:300]}')
+        sys.exit(f'R2 PUT {key} → HTTP {r.status_code}: {r.text[:300]}')
 
+
+# ── Worker notify ────────────────────────────────────────────────────
 def notify_worker(payload: dict) -> dict:
     if not ADMIN_SECRET:
         sys.exit('ADMIN_SECRET не задан в .env (получите у разработчика).')
@@ -584,7 +558,8 @@ def notify_worker(payload: dict) -> dict:
 
 
 # ── Main flows ───────────────────────────────────────────────────────
-def deliver_full(email: str, client_dir: Path, auto_yes: bool = False) -> None:
+def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
+                 product_code: str = 'mission') -> None:
     pdf_path = find_pdf(client_dir)
     cover_path = find_cover_image(client_dir)
     summary_path = find_summary(client_dir)
@@ -605,8 +580,10 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False) -> None:
     slug = slugify_email(email)
     ts = datetime.now().strftime('%Y-%m-%d_%H-%M')
 
-    contract_hint = extract_contract_from_folder(client_dir.name)
-    sheet_info = lookup_sheet_row_for_mission(sheets, email, contract_hint=contract_hint)
+    # Лукап в Sheet — нужен contractId, sheetRow и dateHuman, чтобы
+    # привязать аплоад к правильной строке и собрать имя папки клиента.
+    # FIX-28: продукт-фильтр (mission | money_dna).
+    sheet_info = lookup_sheet_row_for_mission(sheets, email, product_code=product_code)
 
     # CRITICAL: показать оператору данные клиента и заставить подтвердить.
     # Без этого блока было 3 инцидента «отправили не тому клиенту».
@@ -656,7 +633,7 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False) -> None:
         print(f'   OK: {png_file["name"]}')
 
     # Записываем ссылку на папку клиента прямо в Sheet col O (даже без
-    # деплоя нового /admin/mission/drive endpoint — это даёт Дарье
+    # деплоя нового /admin/mission/drive endpoint — это даёт Кайе
     # моментальную ссылку из таблицы).
     if folder_id and folder_url and sheet_row:
         if write_sheet_folder_url(sheets, sheet_row, folder_url):
@@ -767,46 +744,43 @@ def deliver_legacy_pdf(email: str, pdf_path: Path) -> None:
         print('   = Письмо не отправлено: миссия уже была в статусе ready.')
 
 
-def run_lookup(query: str) -> None:
-    """Поиск клиента в Sheet по любому полю."""
-    sheets = get_sheets_service()
-    results = lookup_sheet_row_by_query(sheets, query)
-    if not results:
-        print(f'Ничего не найдено по запросу: {query}')
-        return
-    print(f'Найдено {len(results)} строк:\n')
-    for r in results:
-        cid_short = short_contract(r['contractId'])
-        print(f'  Row {r["sheetRow"]}: {r["buyerName"]} | {r["email"]} | '
-              f'{r["dateHuman"]} | {r["cityFull"]} | {cid_short} | {r["status"]}')
-
-
 def main():
     args = [a for a in sys.argv[1:] if a]
     auto_yes = False
+    # FIX-28: --product mission|money_dna выбирает строку Sheet под нужный
+    # продукт. По умолчанию mission (обратная совместимость).
+    product_code = 'mission'
     if '--yes' in args:
         auto_yes = True
         args.remove('--yes')
     if '-y' in args:
         auto_yes = True
         args.remove('-y')
-    if '--lookup' in args:
-        args.remove('--lookup')
-        run_lookup(' '.join(args) if args else '')
-        return
+    # parse --product=value or --product value
+    new_args = []
+    skip_next = False
+    for i, a in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if a.startswith('--product='):
+            product_code = a.split('=', 1)[1].strip()
+            continue
+        if a == '--product' and i + 1 < len(args):
+            product_code = args[i + 1].strip()
+            skip_next = True
+            continue
+        new_args.append(a)
+    args = new_args
+    if product_code not in ('mission', 'money_dna'):
+        sys.exit(f'--product должен быть mission или money_dna, не {product_code!r}')
+
     if len(args) < 2:
         print(__doc__)
-        print('Использование:')
-        print('  deliver_mission.py [--yes] <email> <папка_или_pdf>')
-        print('  deliver_mission.py --lookup <запрос>')
+        print('Использование: deliver_mission.py [--yes] [--product mission|money_dna] <email> <папка_или_pdf>')
         sys.exit(2)
     email = args[0].strip().lower()
-    target_arg = Path(args[1]).expanduser()
-    target = (
-        target_arg.resolve()
-        if target_arg.is_absolute()
-        else (DEFAULT_CLIENT_PROFILES_DIR / target_arg).resolve()
-    )
+    target = Path(args[1]).expanduser().resolve()
 
     if not EMAIL_RE.match(email):
         sys.exit(f'Email "{email}" выглядит некорректно.')
@@ -814,14 +788,12 @@ def main():
         sys.exit(f'Путь {target} не найден.')
 
     if target.is_file() and target.suffix.lower() == '.pdf':
-        # Legacy-режим тоже проверяет email, но мягче (нет папки клиента
-        # для дополнительной сверки). Подтверждение всё равно требуется.
         sheets = get_sheets_service()
-        sheet_info = lookup_sheet_row_for_mission(sheets, email)
+        sheet_info = lookup_sheet_row_for_mission(sheets, email, product_code=product_code)
         confirm_client_dispatch(email, sheet_info, target.parent, auto_yes)
         deliver_legacy_pdf(email, target)
     elif target.is_dir():
-        deliver_full(email, target, auto_yes=auto_yes)
+        deliver_full(email, target, auto_yes=auto_yes, product_code=product_code)
     else:
         sys.exit('Передайте папку клиента или путь к *.pdf.')
 

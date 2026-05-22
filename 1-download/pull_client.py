@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
-r"""
+"""
 pull_client.py — подтянуть клиента после оплаты в локальную папку.
 
-Что делает (Variant B, актуальная версия):
-  1. Worker сразу после оплаты сам создаёт подпапку клиента в общей
-     Drive-папке «Разборы» (`GDRIVE_FOLDER_ID`) и кладёт туда
-     `chart.csv` — натальную карту, посчитанную фронтом в скрытом
-     iframe.
-  2. Скрипт идёт в Drive, находит папки с `chart.csv` и скачивает
-     их локально в `D:\DariaGalactic\Профайлы клиентов\Купившие разбор\<Имя>_<contract12>_<YYYYMMDD>\`.
+Что делает (Variant B + intergalactic-agent, актуальная версия 22.05.2026):
+  1. Cabinet (`intergalactic-cabinet`) сразу после оплаты создаёт подпапку
+     клиента в общей Drive-папке «Разборы» (`GDRIVE_FOLDER_ID`) и кладёт
+     туда `karta_<short>.csv` — натальную карту, посчитанную фронтом в
+     скрытом iframe (Variant B). Sheet G = "Оплата получена".
+  2. Agent (`intergalactic-agent`, cron каждую минуту) видит новую
+     папку, дёргает n8n→Anthropic, кладёт `<Имя>_<ddmmyyyy>_<slug>.md`
+     обратно в ту же папку клиента. Slug = `миссия` или `деньги`.
+     Sheet G = "Разбор АИ готов (на проверке у Кайи)", M = ссылка на .md,
+     N = дата выдачи.
+  3. Этот скрипт идёт в Drive и скачивает ВСЁ содержимое папки клиента
+     в `Профайлы клиентов/<Имя>_<contract12>_<YYYYMMDD>/`:
+       • `karta_*.csv`               — натальная карта от кабинета;
+       • `<Имя>_<ddmmyyyy>_миссия.md`  — AI-разбор от агента (если есть);
+       • любые ручные правки Дарьи — PDF, Generated_image.png, и т.д.
+  4. Печатает явный маркер `[AI-разбор готов]` для папок, где Дарья
+     может прямо сейчас открывать локальный .md и проверять.
 
 Два режима запуска:
 
@@ -75,11 +85,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PRODUCTY_ROOT = Path(os.environ.get(
-    'PRODUCTY_ROOT',
-    str(Path.home() / 'Desktop' / 'Producty')
-))
-CONFIG_DIR = PRODUCTY_ROOT / 'DariaGalactic' / 'config'
+AGENT_DIR = SCRIPT_DIR.parent
+CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
 
 try:
     from dotenv import load_dotenv
@@ -98,18 +105,13 @@ ADMIN_SECRET = os.environ.get('ADMIN_SECRET', '')
 GDRIVE_FOLDER_ID = os.environ.get('GDRIVE_FOLDER_ID', '')
 
 DEFAULT_LOCAL_ROOT = Path(os.environ.get(
-    'CLIENT_PROFILES_DIR',
-    os.environ.get('MISSION_LOCAL_DIR', r'D:\DariaGalactic\Профайлы клиентов\Купившие разбор'),
+    'MISSION_LOCAL_DIR',
+    str(Path.home() / 'Desktop' / 'Producty' / '4_Intergalactic'
+        / 'DariaGalacticChakra' / 'Профайлы клиентов'),
 ))
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 TOKEN_FILE = CONFIG_DIR / 'gdrive_token.json'
-SHEET_TOKEN_FILE = CONFIG_DIR / 'cabinet_sheet_token.json'
-SHEET_ID = os.environ.get(
-    'SHEET_ID',
-    '1X2voXTHnywDHXk1BRVNsYktrL8MtXHqxl6jhwymLzWE',
-)
-SHEET_SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
 
 # ── Google Drive auth (та же логика, что и в deliver_mission.py) ─────
@@ -138,49 +140,6 @@ def get_drive_service():
             creds = flow.run_local_server(port=0, prompt='select_account')
         TOKEN_FILE.write_text(creds.to_json())
     return build('drive', 'v3', credentials=creds)
-
-
-# ── Google Sheets (фильтр по статусу) ────────────────────────────────
-def get_sheets_service():
-    creds = None
-    if SHEET_TOKEN_FILE.exists():
-        creds = Credentials.from_authorized_user_file(str(SHEET_TOKEN_FILE), SHEET_SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(find_client_secret()), SHEET_SCOPES,
-            )
-            creds = flow.run_local_server(port=0, prompt='select_account')
-        SHEET_TOKEN_FILE.write_text(creds.to_json())
-    return build('sheets', 'v4', credentials=creds)
-
-
-def fetch_in_review_contracts() -> set[str]:
-    """Читает Google Sheet, возвращает set из contract12 (последние 12 символов contractId)
-    для клиентов со статусом 'В разборе у Дарьи'.
-    """
-    sheets = get_sheets_service()
-    result = sheets.spreadsheets().values().get(
-        spreadsheetId=SHEET_ID,
-        range='Покупки!A:H',
-    ).execute()
-    rows = result.get('values', [])
-    if not rows:
-        return set()
-
-    contracts = set()
-    for row in rows[1:]:
-        if len(row) < 8:
-            continue
-        status = (row[7] or '').strip()
-        contract_id = (row[6] or '').strip()
-        if status == 'В разборе у Дарьи' and contract_id:
-            c12 = re.sub(r'[^A-Za-z0-9]+', '', contract_id)[-12:]
-            if c12:
-                contracts.add(c12)
-    return contracts
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -466,9 +425,19 @@ def download_file(service, file_id: str, dest: Path):
 STATUS_PRIORITY = {'in_review': 0, 'awaiting_chart': 1, 'ready': 2}
 
 
-def pick_mission(missions: list[dict], contract: str | None) -> dict:
+def pick_mission(missions: list[dict], contract: str | None,
+                 product_code: str | None = None) -> dict:
+    """Выбор миссии. FIX-28: можно отфильтровать по `productCode`
+    ('mission' | 'money_dna'), если у клиента 2 разных продукта.
+    Без productCode — работает как раньше (берёт первую активную).
+    """
     if not missions:
         sys.exit('У этого email нет миссий в кабинете.')
+    if product_code:
+        missions = [m for m in missions
+                    if (m.get('productCode') or 'mission') == product_code]
+        if not missions:
+            sys.exit(f'У этого email нет записей с productCode={product_code}.')
     if contract:
         for m in missions:
             if (m.get('contractId') or '').strip() == contract.strip():
@@ -487,39 +456,64 @@ def pick_mission(missions: list[dict], contract: str | None) -> dict:
 
 # ── Sync helpers ─────────────────────────────────────────────────────
 def sync_folder_to_local(service, folder_id: str, folder_name: str, out_root: Path,
-                         require_chart_csv: bool = False) -> tuple[int, int, bool]:
+                         require_chart_csv: bool = False) -> dict:
     """Синкает содержимое Drive-папки в локальную <out_root>/<folder_name>/.
 
-    Возвращает (downloaded, skipped, has_chart_csv).
+    Returns: dict {
+        downloaded: int, skipped: int,
+        has_chart_csv: bool, has_ai_report: bool,
+        ai_report_files: list[str],
+    }
     Если require_chart_csv=True и в папке нет CSV-карты — синк пропускается
-    и возвращается (0, 0, False).
+    и возвращается has_chart_csv=False, downloaded=0.
 
-    Карта Worker'ом кладётся как `karta_<short12>.csv` (default из
-    `/lead/chart-csv`); deliver_mission.py может оставлять `chart.csv`
-    или `karta_*.csv`. Считаем, что любой `.csv`-файл в папке = карта
-    готова к скачиванию.
+    Качаем ВСЁ что в папке клиента (кроме nested folders):
+      • karta_*.csv     — натальная карта от кабинета (Variant B);
+      • chart.csv       — legacy имя той же карты;
+      • <Имя>_<ddmmyyyy>_<slug>.md   — AI-разбор от intergalactic-agent
+        (slug = «миссия» | «деньги»). Пример: `Литиос_04071985_миссия.md`.
+        Дарья проверяет это локально в Профайлы клиентов/<folder>/<.md>.
+      • PDF / png / прочее — артефакты, которые Дарья сама положила в
+        папку (готовый разбор, картинка, summary).
+
+    AI-разбор детектируется как `*_миссия.md` или `*_деньги.md`, либо
+    любой `*.md` (для будущих продуктов).
     """
     files = list_folder_files(service, folder_id)
     has_chart_csv = any(
         (f.get('name') or '').lower().endswith('.csv') for f in files
     )
     if require_chart_csv and not has_chart_csv:
-        return (0, 0, False)
+        return {'downloaded': 0, 'skipped': 0, 'has_chart_csv': False,
+                'has_ai_report': False, 'ai_report_files': []}
 
     out_dir = out_root / folder_name
     out_dir.mkdir(parents=True, exist_ok=True)
     downloaded = 0
     skipped = 0
+    ai_report_files: list[str] = []
     for f in files:
         if f.get('mimeType') == 'application/vnd.google-apps.folder':
             continue
-        dest = out_dir / f['name']
+        name = f['name']
+        dest = out_dir / name
+        # Детектим AI-разбор от intergalactic-agent: *_миссия.md / *_деньги.md.
+        if name.lower().endswith('.md') and (
+            '_миссия' in name or '_деньги' in name or '_mission' in name.lower()
+        ):
+            ai_report_files.append(name)
         if dest.exists() and dest.stat().st_size > 0:
             skipped += 1
             continue
         download_file(service, f['id'], dest)
         downloaded += 1
-    return (downloaded, skipped, has_chart_csv)
+    return {
+        'downloaded': downloaded,
+        'skipped': skipped,
+        'has_chart_csv': has_chart_csv,
+        'has_ai_report': bool(ai_report_files),
+        'ai_report_files': ai_report_files,
+    }
 
 
 def list_root_subfolders(service, parent_id: str) -> list[dict]:
@@ -553,10 +547,11 @@ def run_single(args):
     missions = fetch_missions(email)
     print(f'→ Получено миссий: {len(missions)}')
     for i, m in enumerate(missions):
-        print(f'    [{i}] {m.get("buyerName") or "":30s}  status={m.get("status") or "":14s}  '
+        pc = m.get('productCode') or 'mission'
+        print(f'    [{i}] {m.get("buyerName") or "":30s}  product={pc:10s}  status={m.get("status") or "":14s}  '
               f'contractId={m.get("contractId")}  drive={"yes" if m.get("driveFolderId") else "no"}')
 
-    mission = pick_mission(missions, args.contract)
+    mission = pick_mission(missions, args.contract, getattr(args, 'product', None))
     cid = mission.get('contractId') or ''
     print(f'\n→ Выбрана миссия: {mission.get("buyerName")} ({cid})  status={mission.get("status")}')
 
@@ -603,7 +598,7 @@ def run_single(args):
             regen_chart_csv_for(email, cid, timeout_s=int(getattr(args, 'regen_timeout', 30)))
 
     try:
-        downloaded, skipped, _ = sync_folder_to_local(
+        result = sync_folder_to_local(
             service, folder_id, folder_name, out_root, require_chart_csv=False,
         )
     except Exception as e:
@@ -614,39 +609,39 @@ def run_single(args):
             '«interviewkotilev@gmail.com». Удалите gdrive_token.json и\n'
             'переавторизуйтесь под этим же аккаунтом.'
         )
-    print(f'→ Скачано: {downloaded}, пропущено (уже есть): {skipped}')
+    print(f'→ Скачано: {result["downloaded"]}, пропущено (уже есть): {result["skipped"]}')
+    if result['has_ai_report']:
+        print(f'\n✓ AI-разбор готов в папке клиента (на проверке у Кайи):')
+        for fn in result['ai_report_files']:
+            print(f'    • {out_root / folder_name / fn}')
+    elif result['has_chart_csv']:
+        print('\n= AI-разбор пока не готов. CSV есть, агент должен подхватить за ~5-7 мин.')
+    else:
+        print('\n! В папке нет ни карты, ни разбора — проверьте кабинет/агент.')
 
     print('\nГотово.')
     print(f'  • Drive: {folder_url}')
     print(f'  • Локально: {out_root / folder_name}')
-    print('\nДальше: разбор кладёте в эту же папку (PDF + Generated_image.png + summary.md),')
-    print('затем запускаете deliver_mission.py с этим email и путём.')
+    if result['has_ai_report']:
+        print('\nДальше: проверяете .md локально, при необходимости правите,')
+        print('генерируете картинку и запускаете deliver_mission.py с этим email.')
+    else:
+        print('\nДальше: разбор кладёте в эту же папку (PDF + Generated_image.png + summary.md),')
+        print('затем запускаете deliver_mission.py с этим email и путём.')
 
 
 def run_all(args):
-    """Синкаем ТОЛЬКО клиентов со статусом 'В разборе у Дарьи' из Google Sheet."""
+    """Синкаем все подпапки «Разборы» с chart.csv внутри."""
     if not GDRIVE_FOLDER_ID:
         sys.exit('GDRIVE_FOLDER_ID не задан в .env. Без него --all не умеет.')
 
     out_root = Path(args.out_dir).expanduser()
     out_root.mkdir(parents=True, exist_ok=True)
 
-    # ШАГ 1: Читаем Sheet — только клиенты «В разборе у Дарьи»
-    print('→ Читаю Google Sheet для фильтра по статусу…')
-    try:
-        in_review = fetch_in_review_contracts()
-    except Exception as e:
-        sys.exit(f'!! Не удалось прочитать Sheet: {e}\n'
-                 f'Проверьте {SHEET_TOKEN_FILE}')
-    print(f'→ В Sheet статус «В разборе у Дарьи»: {len(in_review)} клиентов')
-
-    if not in_review:
-        print('   Нет клиентов со статусом «В разборе». Нечего скачивать.')
-        return
-
-    # ШАГ 2: Получаем все папки с GDrive
-    print(f'→ Читаю подпапки из Drive «Разборы» ({GDRIVE_FOLDER_ID})')
+    print(f'→ Синк всех клиентов из Drive «Разборы» ({GDRIVE_FOLDER_ID})')
+    print(f'→ Локальная папка: {out_root}')
     service = get_drive_service()
+
     try:
         folders = list_root_subfolders(service, GDRIVE_FOLDER_ID)
     except Exception as e:
@@ -657,73 +652,40 @@ def run_all(args):
         )
     print(f'→ Подпапок в Drive: {len(folders)}')
 
-    # ШАГ 3: Определяем, какие клиенты уже скачаны локально
-    local_contracts = set()
-    local_root = Path(out_root)
-    if local_root.exists():
-        for d in local_root.iterdir():
-            if d.is_dir():
-                for part in d.name.split('_'):
-                    clean = re.sub(r'[^A-Za-z0-9]', '', part)
-                    if len(clean) >= 10:
-                        local_contracts.add(clean)
-
-    # ШАГ 4: Фильтруем — только «В разборе» И ещё не скачаны локально
-    matched = []
-    already_local = []
-    for f in folders:
-        name = f['name']
-        folder_contract = None
-        for part in name.split('_'):
-            clean = re.sub(r'[^A-Za-z0-9]', '', part)
-            if len(clean) >= 10 and clean in in_review:
-                folder_contract = clean
-                break
-        if not folder_contract:
-            continue
-        if folder_contract in local_contracts:
-            already_local.append(name)
-            continue
-        matched.append(f)
-
-    print(f'→ «В разборе» на GDrive: {len(matched) + len(already_local)}')
-    print(f'→ Уже скачаны локально: {len(already_local)}')
-    print(f'→ Новых для скачивания: {len(matched)}')
-
-    if len(matched) > 15:
-        print(f'   ⚠️ ВНИМАНИЕ: >15 новых клиентов ({len(matched)}). Проверьте Sheet.')
-
-    if not matched:
-        print('   Все клиенты «В разборе» уже скачаны. Нечего докачивать.')
+    if not folders:
+        print('   (пусто) — Worker ещё ни одной папки клиента не создал.')
         return
 
-    # ШАГ 5: Скачиваем только новых
     pulled = 0
     skipped_no_csv = 0
     total_downloaded = 0
     total_skipped = 0
-    for f in matched:
+    ai_ready_count = 0
+    for f in folders:
         name = f['name']
         try:
-            dl, sk, has_csv = sync_folder_to_local(
+            r = sync_folder_to_local(
                 service, f['id'], name, out_root, require_chart_csv=True,
             )
         except Exception as e:
             print(f'   ! {name:50s} sync error: {e}')
             continue
-        if not has_csv:
+        if not r['has_chart_csv']:
             skipped_no_csv += 1
             print(f'   = {name:50s} (нет chart.csv — пропуск)')
             continue
         pulled += 1
-        total_downloaded += dl
-        total_skipped += sk
-        print(f'   ↓ {name:50s} downloaded={dl} skipped={sk}')
+        total_downloaded += r['downloaded']
+        total_skipped += r['skipped']
+        ai_marker = ' [AI-разбор готов]' if r['has_ai_report'] else ''
+        if r['has_ai_report']:
+            ai_ready_count += 1
+        print(f'   ↓ {name:50s} downloaded={r["downloaded"]} skipped={r["skipped"]}{ai_marker}')
 
-    print(f'\nГотово.  Скачано: {pulled} из {len(matched)} «В разборе».')
+    print(f'\nГотово.  Папок с chart.csv: {pulled}.  Пропущено (без CSV): {skipped_no_csv}.')
+    print(f'  • Папок с готовым AI-разбором: {ai_ready_count}')
     print(f'  • Скачано файлов: {total_downloaded}')
     print(f'  • Пропущено (уже локально): {total_skipped}')
-    print(f'  • Без CSV: {skipped_no_csv}')
     print(f'  • Локально: {out_root}')
 
 
@@ -759,6 +721,10 @@ def main():
                     help='Синк всех подпапок «Разборы» с chart.csv (батч-режим)')
     ap.add_argument('--contract', default=None,
                     help='(точечный режим / regen) Конкретный contractId, если 2+ миссий')
+    ap.add_argument('--product', default=None,
+                    choices=['mission', 'money_dna'],
+                    help='Фильтр по productCode: mission | money_dna (FIX-28). '
+                         'Если у клиента и mission, и money_dna — указывает какой именно тянуть.')
     ap.add_argument('--out-dir', default=str(DEFAULT_LOCAL_ROOT),
                     help='Локальная папка-родитель (по умолчанию Профайлы клиентов)')
     ap.add_argument('--regen-csv-for', default=None, metavar='EMAIL',

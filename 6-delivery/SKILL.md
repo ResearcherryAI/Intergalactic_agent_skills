@@ -14,13 +14,16 @@ description: Отправка готового разбора миссии в л
 
 ## PRE-DELIVERY CHECKLIST (БЛОКИРУЮЩИЙ)
 
-- [ ] `<Имя>_<DDMMYYYY>_миссия.pdf` существует, >500KB
+- [ ] `<Имя>_<DDMMYYYY>_миссия.pdf` существует, >500KB (собран из v2 после AI-агента)
+- [ ] `<Имя>_<DDMMYYYY>_миссия_v2.md` существует (для новых клиентов с AI-флоу)
+- [ ] `benchmark_report.md` существует, score v2 ≥ 0.90
 - [ ] `summary.md` существует, frontmatter валиден (3 секции)
 - [ ] `Generated_image.png` существует, >100KB
 - [ ] Email взят из Sheet (не из памяти)
 - [ ] Имя в файле = имя в Sheet
 - [ ] Дата в файле = дата в Sheet
-- [ ] Статус в Sheet = «В разборе у Дарьи»
+- [ ] Статус в Sheet ∈ {«Разбор АИ готов (на проверке у Кайи)», «В разборе у Кайи Каэн»}
+- [ ] Получено явное «можно отправлять» от Дарьи в чате
 
 Если хотя бы один пункт не прошёл — СТОП, не запускать.
 
@@ -46,6 +49,24 @@ python ".cursor/skills/6-delivery/deliver_mission.py" --yes <email_клиент�
 ```powershell
 python ".cursor/skills/6-delivery/deliver_mission.py" --yes client@mail.ru "D:\DariaGalactic\Профайлы клиентов\<папка_клиента>" "uuid-contractId"
 ```
+
+### 🆕 FIX-28: `--product mission|money_dna`
+
+Если у одного email есть и mission, и money_dna — указать, какой продукт доставляем:
+```powershell
+python ".cursor/skills/6-delivery/deliver_mission.py" --yes --product mission <email> "<папка>"
+python ".cursor/skills/6-delivery/deliver_mission.py" --yes --product money_dna <email> "<папка>"
+```
+
+Без `--product` по умолчанию = `mission` (обратная совместимость). Скрипт фильтрует строки Sheet по ключевым словам колонки D:
+- `mission` → «миссия», «миссии»
+- `money_dna` → «архитектур», «денег», «50.56»
+
+### 🆕 PDF собирается из v2 (после AI-агента)
+
+PDF, который заливается на Drive и в кабинет, должен быть собран из `<Имя>_<DDMMYYYY>_миссия_v2.md` (доработанной версии после AI-агента), а НЕ из raw `_миссия.md` от агента. Raw остаётся в папке клиента для аудита.
+
+Проверка перед запуском: `dir <папка> | findstr миссия` → должен быть и raw, и v2. PDF имя содержит `_миссия.pdf` без суффикса v2 (клиент видит обычное имя), но содержимое из v2.
 
 ## Что делает скрипт
 
