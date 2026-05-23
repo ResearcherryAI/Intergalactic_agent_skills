@@ -1,4 +1,15 @@
-# Скиллы пайплайна миссии
+# Скиллы пайплайна разборов
+
+Репо обслуживает два продукта с ручной доставкой:
+
+| Продукт | `--product` | Файл-разбор | PDF |
+|---|---|---|---|
+| Анализ миссии звёздной души (код 37) | `mission` | `<Имя>_<DDMMYYYY>_миссия_v2.md` | `<Имя>_<DDMMYYYY>_миссия.pdf` |
+| Архитектура Денег (код 50.56) | `money_dna` | `<Имя>_<DDMMYYYY>_деньги.md` (без `_v2`) | `<Имя>_<DDMMYYYY>_деньги.pdf` |
+
+Оркестратор и `deliver_mission.py` различают продукты по обязательному флагу `--product`. Источник истины для выбора — колонка D Google Sheet «Покупки»:
+- «Анализ миссии звёздной души» → `--product mission`
+- «Архитектура Денег — код 50.56» → `--product money_dna`
 
 ## Архитектура
 
@@ -45,12 +56,38 @@
 
 | Скрипт | Расположение | Назначение |
 |---|---|---|
-| `pull_client.py` | `.cursor/skills/1-download/` | Скачать папки клиентов с Drive |
+| `pull_client.py` | `.cursor/skills/1-download/` | Скачать папки клиентов с Drive (поддерживает `--product mission\|money_dna`) |
 | `generate_pdf.py` | `.cursor/skills/5-pdf/` | MD → стилизованный PDF |
-| `deliver_mission.py` | `.cursor/skills/6-delivery/` | Доставка в кабинет |
+| `deliver_mission.py` | `.cursor/skills/6-delivery/` | Доставка в кабинет. Флаг `--product mission\|money_dna` **обязателен**. |
 
 Все скрипты используют `PRODUCTY_ROOT` (env) или `~/Desktop/Producty` для поиска конфига в `DariaGalactic/config/`.
 Клиентские профайлы по умолчанию лежат на `D:\DariaGalactic\Профайлы клиентов`; переменная `CLIENT_PROFILES_DIR` может переопределить путь.
+
+### Запуск `deliver_mission.py`
+
+```bash
+# Миссия
+python3 .cursor/skills/6-delivery/deliver_mission.py --product mission --yes \
+  client@example.com "Профайлы клиентов/Имя_contract_дата"
+
+# Архитектура Денег
+python3 .cursor/skills/6-delivery/deliver_mission.py --product money_dna --yes \
+  client@example.com "Профайлы клиентов/Имя_contract_дата"
+```
+
+Если флаг `--product` не передан — скрипт остановится с подсказкой. Это защита от тихого затирания не того продукта, когда у клиента в Sheet есть и миссия, и деньги.
+
+Дополнительно скрипт сам решает префикс файлов и R2-ключей по `--product`:
+
+| Артефакт | mission | money_dna |
+|---|---|---|
+| PDF в папке клиента (вход) | `*_миссия.pdf` | `*_деньги.pdf` |
+| Имя PDF на GDrive | `mission_<slug>_<ts>.pdf` | `money_dna_<slug>_<ts>.pdf` |
+| Имя PNG cover на GDrive | `mission_<slug>_<ts>_cover.png` | `money_dna_<slug>_<ts>_cover.png` |
+| Ключ cover.webp в R2 | `mission/<contractShort>/cover.webp` | `money_dna/<contractShort>/cover.webp` |
+| Ключ summary.html в R2 | `mission/<contractShort>/summary.html` | `money_dna/<contractShort>/summary.html` |
+
+Воркер хранит финальные `coverKey`/`summaryKey` в KV `missions:<email>` и при отдаче в кабинет читает их как есть — префикс продукта для воркера прозрачен.
 
 ## Рабочая папка
 

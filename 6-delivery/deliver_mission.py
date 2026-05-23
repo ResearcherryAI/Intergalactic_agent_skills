@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-deliver_mission.py — выкатить готовый разбор миссии в личный кабинет клиента.
+deliver_mission.py — выкатить готовый разбор миссии или Архитектуры денег
+в личный кабинет клиента.
 
 ОБЯЗАТЕЛЬНО перед запуском прочитай раздел «Что НЕ делать» в
 deliver_mission.README.md. Было 3 инцидента, когда отправили разбор
@@ -8,32 +9,42 @@ deliver_mission.README.md. Было 3 инцидента, когда отпра�
 блокирует такое поведение интерактивным подтверждением.
 
 Принимает папку клиента вида `Профайлы клиентов/<Имя_contract_дата>/`. Внутри ищет:
-  • <что-то>_миссия.pdf      — полный разбор (загружается в Drive)
-  • Generated_image.png      — обложка-визуализация (грузится в Drive в полном размере
-                               и в R2 в виде сжатого WebP для кабинета)
-  • summary.md               — выжимка по правилу _ПРАВИЛО_генерация_summary.md
-                               (парсится в HTML и грузится в R2)
+  • <что-то>_миссия.pdf       — для --product mission
+  • <что-то>_деньги.pdf       — для --product money_dna
+  • Generated_image.png       — обложка-визуализация (грузится в Drive в полном размере
+                                и в R2 в виде сжатого WebP для кабинета)
+  • summary.md                — выжимка по правилу _ПРАВИЛО_генерация_summary.md
+                                (парсится в HTML и грузится в R2)
 
 После загрузок дёргает Worker `/admin/mission`, который:
-  • переводит миссию в статус `ready` (KV + Google Sheet),
+  • переводит запись в статус `ready` (KV + Google Sheet) по contractId,
   • отправляет клиенту письмо «Ваш разбор готов» (Resend),
   • отправляет WhatsApp «Анализ готов» через Green API, если в Sheet col P
     (Телефон) сохранён номер (по умолчанию — да, поле обязательное в формах).
 
-У клиента в /me/ карточка миссии переходит в режим inline-preview:
+У клиента в /me/ карточка переходит в режим inline-preview:
 обложка + три секции тезисов + кнопка «Скачать полный PDF».
 
 Запуск:
-    python3 deliver_mission.py [--yes] <email_клиента> <путь_к_папке_клиента>
+    python3 deliver_mission.py --product mission|money_dna [--yes] \\
+        <email_клиента> <путь_к_папке_клиента>
 
-Пример:
-    python3 deliver_mission.py marianna@example.com \\
+Пример (миссия):
+    python3 deliver_mission.py --product mission --yes marianna@example.com \\
         "/Users/kirill/.../Профайлы клиентов/Марианна_on1778267701_20260508"
 
+Пример (деньги):
+    python3 deliver_mission.py --product money_dna --yes natalya@example.com \\
+        "/Users/kirill/.../Профайлы клиентов/Наталья_xx_20260523"
+
 Флаги:
-    --yes / -y   пропустить интерактивное подтверждение (только когда
-                 оператор уже сверил email/имя в Sheet вручную; в норме —
-                 НЕ ИСПОЛЬЗОВАТЬ).
+    --product   ОБЯЗАТЕЛЬНЫЙ. mission или money_dna. Значение брать из
+                колонки D Sheet:
+                  «Анализ миссии звёздной души» → mission
+                  «Архитектура Денег — код 50.56» → money_dna
+    --yes / -y  пропустить интерактивное подтверждение (только когда
+                оператор уже сверил email/имя в Sheet вручную; в норме —
+                НЕ ИСПОЛЬЗОВАТЬ).
 
 Обратная совместимость: если вторым аргументом передан *.pdf, скрипт работает
 по старой логике (только Drive + статус ready без inline-preview).
@@ -353,10 +364,17 @@ def file_id_from_link(link: str) -> str:
     return m.group(1) if m else ''
 
 
-def find_pdf(client_dir: Path) -> Path | None:
-    for cand in client_dir.glob('*_миссия.pdf'):
+def find_pdf(client_dir: Path, product_code: str = 'mission') -> Path | None:
+    """FIX-28: ищем PDF по продукту. mission → *_миссия.pdf, money_dna → *_деньги.pdf.
+    Fallback на *.pdf оставлен как safety net, но с предупреждением — это
+    защита от опечатки в имени файла, не штатный путь.
+    """
+    suffix = '*_деньги.pdf' if product_code == 'money_dna' else '*_миссия.pdf'
+    for cand in client_dir.glob(suffix):
         return cand
     pdfs = sorted(client_dir.glob('*.pdf'))
+    if pdfs:
+        print(f'   ⚠️  Не найден {suffix}, использую {pdfs[0].name} (проверь, что это правильный файл).')
     return pdfs[0] if pdfs else None
 
 
@@ -560,13 +578,20 @@ def notify_worker(payload: dict) -> dict:
 # ── Main flows ───────────────────────────────────────────────────────
 def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
                  product_code: str = 'mission') -> None:
-    pdf_path = find_pdf(client_dir)
+    # FIX-28: префикс файлов и R2-ключей зависит от продукта.
+    # mission → mission_<slug>_<ts>.pdf, R2 mission/<contract>/...
+    # money_dna → money_dna_<slug>_<ts>.pdf, R2 money_dna/<contract>/...
+    prefix = 'money_dna' if product_code == 'money_dna' else 'mission'
+    expected_suffix = '*_деньги.pdf' if product_code == 'money_dna' else '*_миссия.pdf'
+
+    pdf_path = find_pdf(client_dir, product_code)
     cover_path = find_cover_image(client_dir)
     summary_path = find_summary(client_dir)
 
     if not pdf_path:
-        sys.exit(f'В {client_dir} не найден *_миссия.pdf')
+        sys.exit(f'В {client_dir} не найден {expected_suffix}')
 
+    print(f'Product    : {product_code}')
     print(f'Email      : {email}')
     print(f'Папка      : {client_dir}')
     print(f'PDF        : {pdf_path.name}')
@@ -619,7 +644,7 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
             folder_id = ''
 
     print('2) Загружаю PDF…')
-    pdf_remote = f'mission_{slug}_{ts}.pdf'
+    pdf_remote = f'{prefix}_{slug}_{ts}.pdf'
     pdf_file = upload_to_drive(service, pdf_path, pdf_remote, 'application/pdf', folder_id or None)
     drive_link = pdf_file.get('webViewLink', '')
     print(f'   OK: {pdf_file["name"]}')
@@ -627,7 +652,7 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
     drive_image_link = ''
     if cover_path:
         print('3) Загружаю полную обложку (PNG)…')
-        png_remote = f'mission_{slug}_{ts}_cover.png'
+        png_remote = f'{prefix}_{slug}_{ts}_cover.png'
         png_file = upload_to_drive(service, cover_path, png_remote, 'image/png', folder_id or None)
         drive_image_link = png_file.get('webViewLink', '')
         print(f'   OK: {png_file["name"]}')
@@ -662,9 +687,9 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
         # R2-ключи делим по contractId (если есть), иначе по slug-email.
         # contractId надёжнее — выдерживает несколько миссий на одном email.
         r2_partition = short_contract(contract_id) if contract_id else slug
-        print(f'6) Загружаю cover.webp и summary.html в Cloudflare R2 (partition={r2_partition})…')
-        cover_key = f'mission/{r2_partition}/cover.webp'
-        summary_key = f'mission/{r2_partition}/summary.html'
+        print(f'6) Загружаю cover.webp и summary.html в Cloudflare R2 (prefix={prefix}, partition={r2_partition})…')
+        cover_key = f'{prefix}/{r2_partition}/cover.webp'
+        summary_key = f'{prefix}/{r2_partition}/summary.html'
         r2_put(cover_key, cover_bytes, 'image/webp')
         r2_put(summary_key, html.encode('utf-8'), 'text/html; charset=utf-8')
         print(f'   OK: {cover_key}, {summary_key}')
@@ -681,7 +706,7 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
 
     print('7) Обновляю личный кабинет (Worker /admin/mission)…')
     res = notify_worker(payload)
-    print(f'   OK: статус миссии для {email} → ready (inline-preview: '
+    print(f'   OK: статус {product_code} для {email} → ready (inline-preview: '
           f'{"да" if payload.get("inlinePreview") else "нет"})')
     if res.get('sheetError'):
         print(f'   ⚠️  Sheet update warning: {res["sheetError"]}')
@@ -712,8 +737,10 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
         print('   = WhatsApp не отправлен: в Sheet col P (Телефон) пусто.')
 
 
-def deliver_legacy_pdf(email: str, pdf_path: Path) -> None:
+def deliver_legacy_pdf(email: str, pdf_path: Path, product_code: str = 'mission') -> None:
     """Старый режим — только PDF без R2."""
+    prefix = 'money_dna' if product_code == 'money_dna' else 'mission'
+    print(f'Product : {product_code}')
     print(f'Email   : {email}')
     print(f'PDF     : {pdf_path}')
     print(f'Worker  : {WORKER_URL}')
@@ -723,7 +750,7 @@ def deliver_legacy_pdf(email: str, pdf_path: Path) -> None:
     service = get_drive_service()
     slug = slugify_email(email)
     ts = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    pdf_remote = f'mission_{slug}_{ts}.pdf'
+    pdf_remote = f'{prefix}_{slug}_{ts}.pdf'
 
     print('1) Загружаю PDF на Google Drive…')
     pdf_file = upload_to_drive(service, pdf_path, pdf_remote, 'application/pdf')
@@ -735,7 +762,7 @@ def deliver_legacy_pdf(email: str, pdf_path: Path) -> None:
         'email': email, 'status': 'ready',
         'driveLink': drive_link, 'fileName': pdf_file['name'],
     })
-    print(f'   OK: статус миссии для {email} → ready')
+    print(f'   OK: статус {product_code} для {email} → ready')
     if res.get('emailSent'):
         print('   ✓ Письмо «разбор готов» отправлено клиенту.')
     elif res.get('emailError'):
@@ -748,8 +775,10 @@ def main():
     args = [a for a in sys.argv[1:] if a]
     auto_yes = False
     # FIX-28: --product mission|money_dna выбирает строку Sheet под нужный
-    # продукт. По умолчанию mission (обратная совместимость).
-    product_code = 'mission'
+    # продукт. С 23.05.2026 флаг ОБЯЗАТЕЛЬНЫЙ — дефолта нет.
+    # Это защита от тихого затирания не того продукта, когда у клиента
+    # есть и миссия и деньги одновременно.
+    product_code = None
     if '--yes' in args:
         auto_yes = True
         args.remove('--yes')
@@ -772,12 +801,19 @@ def main():
             continue
         new_args.append(a)
     args = new_args
+    if product_code is None:
+        sys.exit(
+            'СТОП: --product обязателен. Укажите --product mission или --product money_dna.\n'
+            'Значение брать из колонки D Sheet:\n'
+            '  «Анализ миссии звёздной души» → --product mission\n'
+            '  «Архитектура Денег — код 50.56» → --product money_dna'
+        )
     if product_code not in ('mission', 'money_dna'):
         sys.exit(f'--product должен быть mission или money_dna, не {product_code!r}')
 
     if len(args) < 2:
         print(__doc__)
-        print('Использование: deliver_mission.py [--yes] [--product mission|money_dna] <email> <папка_или_pdf>')
+        print('Использование: deliver_mission.py [--yes] --product mission|money_dna <email> <папка_или_pdf>')
         sys.exit(2)
     email = args[0].strip().lower()
     target = Path(args[1]).expanduser().resolve()
@@ -791,7 +827,7 @@ def main():
         sheets = get_sheets_service()
         sheet_info = lookup_sheet_row_for_mission(sheets, email, product_code=product_code)
         confirm_client_dispatch(email, sheet_info, target.parent, auto_yes)
-        deliver_legacy_pdf(email, target)
+        deliver_legacy_pdf(email, target, product_code=product_code)
     elif target.is_dir():
         deliver_full(email, target, auto_yes=auto_yes, product_code=product_code)
     else:

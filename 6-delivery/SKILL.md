@@ -14,9 +14,12 @@ description: Отправка готового разбора миссии в л
 
 ## PRE-DELIVERY CHECKLIST (БЛОКИРУЮЩИЙ)
 
-- [ ] `<Имя>_<DDMMYYYY>_миссия.pdf` существует, >500KB (собран из v2 после AI-агента)
-- [ ] `<Имя>_<DDMMYYYY>_миссия_v2.md` существует (для новых клиентов с AI-флоу)
-- [ ] `benchmark_report.md` существует, score v2 ≥ 0.90
+**Общие пункты (для любого продукта):**
+
+- [ ] Флаг `--product` указан явно (`mission` или `money_dna`). Брать значение из колонки D Sheet:
+  - «Анализ миссии звёздной души» → `--product mission`
+  - «Архитектура Денег — код 50.56» → `--product money_dna`
+  - Без флага НЕ запускать (даже если у клиента только один продукт).
 - [ ] `summary.md` существует, frontmatter валиден (3 секции)
 - [ ] `Generated_image.png` существует, >100KB
 - [ ] Email взят из Sheet (не из памяти)
@@ -24,6 +27,18 @@ description: Отправка готового разбора миссии в л
 - [ ] Дата в файле = дата в Sheet
 - [ ] Статус в Sheet ∈ {«Разбор АИ готов (на проверке у Кайи)», «В разборе у Кайи Каэн»}
 - [ ] Получено явное «можно отправлять» от Дарьи в чате
+
+**Для `--product mission`:**
+
+- [ ] `<Имя>_<DDMMYYYY>_миссия.pdf` существует, >500KB (собран из v2 после AI-агента)
+- [ ] `<Имя>_<DDMMYYYY>_миссия_v2.md` существует (для новых клиентов с AI-флоу)
+- [ ] `benchmark_report.md` существует, score v2 ≥ 0.90
+
+**Для `--product money_dna`:**
+
+- [ ] `<Имя>_<DDMMYYYY>_деньги.pdf` существует, >500KB
+- [ ] `<Имя>_<DDMMYYYY>_деньги.md` существует (у денег нет v2 — только одна версия)
+- [ ] `benchmark_money_report.md` существует, score ≥ 0.90 (или эквивалент из `3-money-validation`)
 
 Если хотя бы один пункт не прошёл — СТОП, не запускать.
 
@@ -82,8 +97,13 @@ PDF, который заливается на Drive и в кабинет, дол
 
 PDF и PNG не попадают в git. Бэкап через rclone:
 ```powershell
+# для --product mission
 rclone copy "<папка_клиента>/Generated_image.png" "gdrive:DariaGalactic/Профайлы клиентов/<имя_папки>/"
 rclone copy "<папка_клиента>/<Имя>_миссия.pdf" "gdrive:DariaGalactic/Профайлы клиентов/<имя_папки>/"
+
+# для --product money_dna
+rclone copy "<папка_клиента>/Generated_image.png" "gdrive:DariaGalactic/Профайлы клиентов/<имя_папки>/"
+rclone copy "<папка_клиента>/<Имя>_деньги.pdf" "gdrive:DariaGalactic/Профайлы клиентов/<имя_папки>/"
 ```
 
 ## Логика частичного успеха
@@ -99,22 +119,43 @@ rclone copy "<папка_клиента>/<Имя>_миссия.pdf" "gdrive:Dari
 
 **Раздельные коммиты — raw (AI-снапшот) и v2 (правки Кайи).** Это нужно для аудита: всегда видно, что писал агент и что дорабатывала Кайя.
 
+> Замените `<product_human>` на «миссия» или «деньги» в зависимости от `--product`.
+> Для `--product money_dna` шага «v2» нет — у денег одна версия `_деньги.md`.
+
+### Для `--product mission`:
+
 ```powershell
 cd "D:\DariaGalactic\Профайлы клиентов"
 
 # 1) Снапшот AI-выхода (raw от агента) — отдельный коммит
 git add "<папка_клиента>/<Имя>_<DDMMYYYY>_миссия.md"
 git add "<папка_клиента>/karta_*.csv"
-git commit -m "[ai-snapshot] <Имя> <DDMMYYYY> — raw разбор от intergalactic-agent"
+git commit -m "[ai-snapshot] <Имя> <DDMMYYYY> — raw разбор миссии от intergalactic-agent"
 
 # 2) Доработка Кайи (v2 + benchmark_report + summary + image)
 git add "<папка_клиента>/<Имя>_<DDMMYYYY>_миссия_v2.md"
 git add "<папка_клиента>/benchmark_report.md"
 git add "<папка_клиента>/summary.md"
-git commit -m "[v2-edits] <Имя> <DDMMYYYY> — доработка Кайи, score X.XX"
+git commit -m "[v2-edits] <Имя> <DDMMYYYY> — доработка Кайи миссия, score X.XX"
 
 # 3) Доставка (статус ready, ссылки в Sheet)
 git commit --allow-empty -m "[delivery] <Имя> <DDMMYYYY> — миссия выдана клиенту"
+```
+
+### Для `--product money_dna`:
+
+```powershell
+cd "D:\DariaGalactic\Профайлы клиентов"
+
+# 1) Разбор + summary + image (у денег одна версия, без raw/v2 split)
+git add "<папка_клиента>/<Имя>_<DDMMYYYY>_деньги.md"
+git add "<папка_клиента>/karta_*.csv"
+git add "<папка_клиента>/benchmark_money_report.md"
+git add "<папка_клиента>/summary.md"
+git commit -m "[money-dna] <Имя> <DDMMYYYY> — разбор денег готов, score X.XX"
+
+# 2) Доставка
+git commit --allow-empty -m "[delivery] <Имя> <DDMMYYYY> — деньги выданы клиенту"
 ```
 
 Если raw уже был закоммичен при первом pull-е — пропустить шаг 1.
@@ -152,6 +193,7 @@ if ($free -lt 500) { Write-Output "⚠️ КРИТИЧНО: <500 MB свобод
 
 ```
 ✅ ПРОВЕРКА ДОСТАВКИ:
+- Product: [mission | money_dna]   ← ОБЯЗАТЕЛЬНО, должно совпадать с --product
 - Email из Sheet: [email]
 - Строка Sheet: [номер]
 - Имя: [имя] — файл: [имя из папки] → ✓/✗

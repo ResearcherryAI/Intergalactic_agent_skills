@@ -242,8 +242,15 @@ read SKILL 1-download (--all) → для каждого: 2-analysis → 3-valida
 
 **Один клиент:**
 ```
-read SKILL 1-download (точечный, если нужно) → read SKILL 2-money-analysis → read SKILL 3-money-validation → read SKILL 4-money-image
+read SKILL 1-download (точечный, если нужно)
+→ read SKILL 2-money-analysis
+→ read SKILL 3-money-validation
+→ read SKILL 4-money-image
+→ read SKILL 5-pdf (тот же скрипт generate_pdf.py, на файле <Имя>_<DDMMYYYY>_деньги.md — у денег нет v2)
+→ read SKILL 6-delivery с флагом `--product money_dna`
 ```
+
+У миссии и денег один и тот же скрипт `deliver_mission.py`. Различие — флаг `--product mission` (дефолт) или `--product money_dna`. Скрипт фильтрует строки Sheet по колонке D, обновляет KV по `contractId` (другие записи клиента не трогает). См. `6-delivery/SKILL.md`.
 
 ## Скрипты (расположение в скиллах)
 
@@ -266,6 +273,8 @@ read SKILL 1-download (точечный, если нужно) → read SKILL 2-m
 | `Разбор АИ готов (на проверке у Кайи)` | agent | **взять в работу: pull → AI-Review → бенчмарк → Дарья** |
 | `В разборе у Кайи Каэн` | legacy (до 22.05.2026) | взять как полный разбор с нуля по 2-analysis |
 | `Готов · выдан клиенту` | deliver_mission.py | пропустить |
+
+Статус один для обоих продуктов. Какой именно продукт обновлять, скрипт `deliver_mission.py` определяет по флагу `--product` (берём из колонки D Sheet) и точечно меняет статус только нужной строки.
 
 ## Обязательная вычитка перед отправкой
 
