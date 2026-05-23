@@ -78,10 +78,7 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 AGENT_DIR = SCRIPT_DIR.parent  # intergalacticAstoAgent/
-_producty_root = Path(os.environ.get('PRODUCTY_ROOT', AGENT_DIR.parent))
-CONFIG_DIR = _producty_root / 'DariaGalactic' / 'config'
-if not CONFIG_DIR.exists():
-    CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
+CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
 
 try:
     from dotenv import load_dotenv
@@ -367,17 +364,28 @@ def file_id_from_link(link: str) -> str:
     return m.group(1) if m else ''
 
 
+def _latest(paths):
+    # Сортируем строго по имени desc. Скрипт сам именует файлы с полным
+    # timestamp `..._YYYY-MM-DD_HH-MM`, поэтому лексикографический sort
+    # даёт хронологический порядок. mtime сюда не подключаем: после
+    # rsync/копии mtime может вообще не соответствовать «свежести» —
+    # был кейс, когда самый старый по timestamp в имени файл получил
+    # самый поздний mtime и затёр финальную ревизию (Гастон, 23.05.2026).
+    return sorted(paths, key=lambda p: p.name, reverse=True)
+
+
 def find_pdf(client_dir: Path, product_code: str = 'mission') -> Path | None:
     """FIX-28: ищем PDF по продукту. mission → *_миссия.pdf, money_dna → *_деньги.pdf.
-    Fallback на *.pdf оставлен как safety net, но с предупреждением — это
-    защита от опечатки в имени файла, не штатный путь.
+    Fallback на *.pdf оставлен как safety net — берём самый свежий по mtime,
+    при равенстве — лексикографически старший по имени (имена содержат timestamp).
     """
     suffix = '*_деньги.pdf' if product_code == 'money_dna' else '*_миссия.pdf'
-    for cand in client_dir.glob(suffix):
-        return cand
-    pdfs = sorted(client_dir.glob('*.pdf'))
+    candidates = _latest(client_dir.glob(suffix))
+    if candidates:
+        return candidates[0]
+    pdfs = _latest(client_dir.glob('*.pdf'))
     if pdfs:
-        print(f'   ⚠️  Не найден {suffix}, использую {pdfs[0].name} (проверь, что это правильный файл).')
+        print(f'   ⚠️  Не найден {suffix}, использую самый свежий: {pdfs[0].name}.')
     return pdfs[0] if pdfs else None
 
 
@@ -386,7 +394,7 @@ def find_cover_image(client_dir: Path) -> Path | None:
         p = client_dir / name
         if p.exists():
             return p
-    pngs = sorted(client_dir.glob('*.png'))
+    pngs = _latest(client_dir.glob('*.png'))
     return pngs[0] if pngs else None
 
 
