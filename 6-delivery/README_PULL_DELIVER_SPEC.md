@@ -45,7 +45,7 @@ python3 pull_client.py <email> [--contract <contractId>] [--product mission|mone
 2. Выбирает нужную запись по `--contract` или `--product` (или первую активную `in_review`/`awaiting_chart`)
 3. Берёт `driveFolderId` из записи (его создал воркер при оплате)
 4. Скачивает **всё содержимое** Drive-подпапки клиента в локальную директорию:
-   - Путь: `~/Desktop/Producty/4_Intergalactic/DariaGalacticChakra/Профайлы клиентов/<Имя>_<contract12>_<YYYYMMDD>/`
+   - Путь: `D:\DariaGalactic\Профайлы клиентов\Купившие разбор\<Имя>_<contract12>_<YYYYMMDD>/` (переопределяется через `CLIENT_PROFILES_DIR` или `MISSION_LOCAL_DIR`)
    - Файлы: `karta_<short>.csv` (и любые другие, если уже что-то положили)
 5. Если CSV в Drive нет (мобильный iframe прервался) — авто-regen через headless Chromium
 

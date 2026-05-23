@@ -107,7 +107,7 @@ python3 scripts/pull_client.py клиент@example.com
 
 ### 3.2. Сделай разбор, сложи всё в одну папку
 
-В папке клиента (`DariaGalacticChakra/Профайлы клиентов/<Имя>_<contract12>_<YYYYMMDD>/`):
+В папке клиента (`D:\DariaGalactic\Профайлы клиентов\Купившие разбор\<Имя>_<contract12>_<YYYYMMDD>/`):
 
 - `*_миссия.pdf` — полный разбор,
 - `Generated_image.png` — обложка-визуализация в полном размере,
@@ -119,9 +119,9 @@ python3 scripts/pull_client.py клиент@example.com
 ### 3.3. Одна команда в терминале
 
 ```bash
-cd "/Users/<твой_логин>/Desktop/Producty/4_Intergalactic/intergalacticAstoAgent"
-python3 scripts/deliver_mission.py клиент@example.com \
-    "/Users/<…>/DariaGalacticChakra/Профайлы клиентов/Имя_5e42_20260510"
+cd "C:\Users\Кири\Desktop\Producty"
+python ".cursor\skills\6-delivery\deliver_mission.py" --product mission --yes \
+    клиент@example.com "D:\DariaGalactic\Профайлы клиентов\Купившие разбор\Имя_5e42_20260510"
 ```
 
 (Если папки нет — можно передать просто `*.pdf`, тогда сработает

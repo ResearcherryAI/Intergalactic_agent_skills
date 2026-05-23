@@ -85,8 +85,12 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-AGENT_DIR = SCRIPT_DIR.parent
-CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
+AGENT_DIR = SCRIPT_DIR.parent  # .cursor/skills/
+_producty_root = Path(os.environ.get('PRODUCTY_ROOT', AGENT_DIR.parent.parent))
+CONFIG_DIR = _producty_root / 'DariaGalactic' / 'config'
+if not CONFIG_DIR.exists():
+    # Fallback: старая логика для совместимости (когда конфиг рядом со скриптом).
+    CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
 
 try:
     from dotenv import load_dotenv
@@ -105,9 +109,11 @@ ADMIN_SECRET = os.environ.get('ADMIN_SECRET', '')
 GDRIVE_FOLDER_ID = os.environ.get('GDRIVE_FOLDER_ID', '')
 
 DEFAULT_LOCAL_ROOT = Path(os.environ.get(
-    'MISSION_LOCAL_DIR',
-    str(Path.home() / 'Desktop' / 'Producty' / '4_Intergalactic'
-        / 'DariaGalacticChakra' / 'Профайлы клиентов'),
+    'CLIENT_PROFILES_DIR',
+    os.environ.get(
+        'MISSION_LOCAL_DIR',
+        r'D:\DariaGalactic\Профайлы клиентов\Купившие разбор',
+    ),
 ))
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
