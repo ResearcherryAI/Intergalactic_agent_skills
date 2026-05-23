@@ -540,27 +540,56 @@ def make_cover_webp(src_path: Path) -> bytes:
 
 
 # ── R2 upload ────────────────────────────────────────────────────────
-def r2_put(key: str, body: bytes, content_type: str) -> None:
-    if not (CF_ACCOUNT_ID and CF_R2_TOKEN and CF_R2_BUCKET):
-        sys.exit(
-            'CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_R2_TOKEN / CLOUDFLARE_R2_BUCKET '
-            'не заданы в .env.'
-        )
-    url = (
-        f'https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}'
-        f'/r2/buckets/{CF_R2_BUCKET}/objects/{key}'
-    )
-    r = requests.put(
-        url,
+def r2_put_via_worker(key: str, body: bytes, content_type: str) -> None:
+    """Fallback: PUT через worker endpoint /admin/r2/put.
+    Используется когда CLOUDFLARE_R2_TOKEN не задан или не имеет
+    R2 Object Write permissions (типичный случай — токен сделан только
+    под Workers Edit). У воркера биндинг MISSION_R2 уже работает.
+    """
+    if not ADMIN_SECRET:
+        sys.exit('Нет CLOUDFLARE_R2_TOKEN и нет ADMIN_SECRET — некуда лить cover/summary в R2.')
+    r = requests.post(
+        WORKER_URL.rstrip('/') + '/admin/r2/put',
         headers={
-            'Authorization': f'Bearer {CF_R2_TOKEN}',
-            'Content-Type': content_type,
+            'X-Admin-Key': ADMIN_SECRET,
+            'X-R2-Key': key,
+            'X-R2-Content-Type': content_type,
         },
         data=body,
         timeout=60,
     )
     if r.status_code != 200:
+        sys.exit(f'R2 PUT (worker) {key} → HTTP {r.status_code}: {r.text[:300]}')
+
+
+def r2_put(key: str, body: bytes, content_type: str) -> None:
+    # Сначала пытаемся через прямой CF API (быстрее и без worker hop).
+    # Если токен отсутствует или у него нет прав — падаем в worker
+    # endpoint, который работает по ADMIN_SECRET.
+    if CF_ACCOUNT_ID and CF_R2_TOKEN and CF_R2_BUCKET:
+        url = (
+            f'https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}'
+            f'/r2/buckets/{CF_R2_BUCKET}/objects/{key}'
+        )
+        r = requests.put(
+            url,
+            headers={
+                'Authorization': f'Bearer {CF_R2_TOKEN}',
+                'Content-Type': content_type,
+            },
+            data=body,
+            timeout=60,
+        )
+        if r.status_code == 200:
+            return
+        # 401/403 — у токена нет R2 Object Write, идём в fallback.
+        if r.status_code in (401, 403):
+            print(f'   ⚠️  CF R2 API вернул {r.status_code}, переключаюсь на worker /admin/r2/put.')
+            r2_put_via_worker(key, body, content_type)
+            return
         sys.exit(f'R2 PUT {key} → HTTP {r.status_code}: {r.text[:300]}')
+    # Нет токена — сразу через воркер.
+    r2_put_via_worker(key, body, content_type)
 
 
 # ── Worker notify ────────────────────────────────────────────────────
@@ -673,6 +702,10 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
         'driveLink': drive_link,
         'fileName': pdf_file['name'],
         'driveImageLink': drive_image_link,
+        # FIX-31: явно говорим воркеру, какой продукт доставляем.
+        # Без этого при первой доставке money_dna воркер не мог отличить
+        # запись money_dna от mission и пропатчил mission Гастона.
+        'productCode': product_code,
     }
     if contract_id:
         payload['contractId'] = contract_id
