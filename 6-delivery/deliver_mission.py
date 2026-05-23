@@ -78,7 +78,10 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 AGENT_DIR = SCRIPT_DIR.parent  # intergalacticAstoAgent/
-CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
+_producty_root = Path(os.environ.get('PRODUCTY_ROOT', AGENT_DIR.parent))
+CONFIG_DIR = _producty_root / 'DariaGalactic' / 'config'
+if not CONFIG_DIR.exists():
+    CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
 
 try:
     from dotenv import load_dotenv
