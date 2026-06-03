@@ -37,10 +37,14 @@ description: Отправка готового разбора миссии в л
 
 **Для `--product money_dna`:**
 
-- [ ] `<Имя>_<DDMMYYYY>_деньги.pdf` существует, >500KB
+- [ ] `<Имя>_<DDMMYYYY>_деньги.pdf` существует, **>500KB** (если меньше — почти всегда «голый» PDF без CSS, пересобрать через `generate_money_pdf.py`)
+- [ ] PDF собран ТОЛЬКО через `.cursor/skills/5-pdf/generate_money_pdf.py` — НЕ через прямой `pandoc → chrome --headless`
+- [ ] PDF не содержит локальных ссылок: `python -c "d=open('<pdf>','rb').read(); assert b'file:///' not in d and b'D:/DariaGalactic' not in d"`
 - [ ] `<Имя>_<DDMMYYYY>_деньги.md` существует (у денег нет v2 — только одна версия)
 - [ ] `benchmark_money_report.md` существует, score ≥ 0.90 (или эквивалент из `3-money-validation`)
 - [ ] `Generated_image.png` существует (это требуется для `--product money_dna`, парсер ищет именно `Generated_image.png` как cover)
+- [ ] **`Generated_image.png` — это ИМЕННО картинка ДНК денег**, а не обложка миссии. Если в папке клиента уже есть `mission_*_cover.png` или `<Имя>_финансовая_ДНК.png` — сравнить размеры с `Generated_image.png`. Если совпадают с обложкой миссии — заменить на финансовую ДНК.
+- [ ] **`summary.md` существует в ЭТОЙ ЖЕ папке (money).** Без `summary.md` скрипт НЕ загрузит обложку в R2 (шаг 4–6 будет пропущен) и сайт покажет СТАРУЮ картинку. Это критично: `summary.md` = триггер для R2-обложки. Если его нет — создать ПЕРЕД запуском delivery по шаблону (frontmatter + 3 секции: «Ваш дар», «Ваш вызов», «Что делать»).
 
 **Нормализация имён файлов перед запуском (`--product money_dna`):**
 

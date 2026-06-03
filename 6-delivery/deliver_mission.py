@@ -617,7 +617,7 @@ def notify_worker(payload: dict) -> dict:
 
 # ── Main flows ───────────────────────────────────────────────────────
 def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
-                 product_code: str = 'mission') -> None:
+                 product_code: str = 'mission', contract_hint: str = '') -> None:
     # FIX-28: префикс файлов и R2-ключей зависит от продукта.
     # mission → mission_<slug>_<ts>.pdf, R2 mission/<contract>/...
     # money_dna → money_dna_<slug>_<ts>.pdf, R2 money_dna/<contract>/...
@@ -648,7 +648,7 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
     # Лукап в Sheet — нужен contractId, sheetRow и dateHuman, чтобы
     # привязать аплоад к правильной строке и собрать имя папки клиента.
     # FIX-28: продукт-фильтр (mission | money_dna).
-    sheet_info = lookup_sheet_row_for_mission(sheets, email, product_code=product_code)
+    sheet_info = lookup_sheet_row_for_mission(sheets, email, contract_hint=contract_hint, product_code=product_code)
 
     # CRITICAL: показать оператору данные клиента и заставить подтвердить.
     # Без этого блока было 3 инцидента «отправили не тому клиенту».
@@ -861,6 +861,7 @@ def main():
         sys.exit(2)
     email = args[0].strip().lower()
     target = Path(args[1]).expanduser().resolve()
+    contract_hint = args[2].strip() if len(args) > 2 else ''
 
     if not EMAIL_RE.match(email):
         sys.exit(f'Email "{email}" выглядит некорректно.')
@@ -873,7 +874,7 @@ def main():
         confirm_client_dispatch(email, sheet_info, target.parent, auto_yes)
         deliver_legacy_pdf(email, target, product_code=product_code)
     elif target.is_dir():
-        deliver_full(email, target, auto_yes=auto_yes, product_code=product_code)
+        deliver_full(email, target, auto_yes=auto_yes, product_code=product_code, contract_hint=contract_hint)
     else:
         sys.exit('Передайте папку клиента или путь к *.pdf.')
 

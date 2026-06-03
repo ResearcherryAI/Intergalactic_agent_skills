@@ -1,15 +1,24 @@
 ---
 name: mission-pdf
-description: Конвертация MD-разбора миссии в стилизованный PDF через pandoc + Chrome headless. Включает проверку результата. Использовать когда нужно сгенерировать PDF, сконвертировать разбор.
+description: Конвертация MD-разбора в стилизованный PDF через pandoc + Chrome headless. Поддерживает МИССИЮ и ДНК ДЕНЕГ. Использовать когда нужно сгенерировать PDF, сконвертировать разбор.
 ---
 
 # Подготовка PDF
 
+## ⚠ Два пайплайна — НЕ ПУТАТЬ
+
+| Продукт | Скрипт | Header | Особенности |
+|---------|--------|--------|-------------|
+| Миссия | `generate_pdf.py` | «Разбор миссии» | Делит текст на «СТРУКТУРА ДНК» + «АНАЛИЗ МИССИИ» |
+| ДНК денег | `generate_money_pdf.py` | «ДНК Денег» | Использует тот же CSS, БЕЗ split_service_client |
+
+**ЗАПРЕЩЕНО** для денег вызывать `pandoc → chrome --headless` напрямую — даёт «голый» PDF 250-300 KB. Использовать ТОЛЬКО `generate_money_pdf.py`.
+
 ## INPUT-гейт
 
-- [ ] `<Имя>_<DDMMYYYY>_миссия.md` существует и прошёл валидацию (3-validation OK)
+- [ ] `<Имя>_<DDMMYYYY>_<миссия|деньги>.md` существует и прошёл валидацию
 - [ ] `summary.md` существует
-- [ ] `Generated_image.png` существует
+- [ ] `Generated_image.png` существует и это правильная картинка под продукт (для денег — ДНК денег, не обложка миссии!)
 
 ## Идемпотентность
 
@@ -32,12 +41,19 @@ description: Конвертация MD-разбора миссии в стили
 
 ### 2. Конвертация
 
+**Миссия:**
 ```powershell
 $env:PYTHONIOENCODING="utf-8"
 python ".cursor/skills/5-pdf/generate_pdf.py" -i "<папка_клиента>\<имя>_миссия.md"
 ```
 
-Скрипт ищет относительные пути внутри `D:\DariaGalactic\Профайлы клиентов\`. Для другого расположения можно задать `CLIENT_PROFILES_DIR`.
+**ДНК денег:**
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+python ".cursor/skills/5-pdf/generate_money_pdf.py" -i "<папка_клиента>\<имя>_деньги.md"
+```
+
+Оба скрипта ищут относительные пути внутри `D:\DariaGalactic\Профайлы клиентов\`. Для другого расположения можно задать `CLIENT_PROFILES_DIR`.
 
 ### 3. Верификация данных клиента
 
@@ -63,7 +79,19 @@ python ".cursor/skills/5-pdf/generate_pdf.py" -i "<папка_клиента>\<�
 | Таблица обрезана | Много столбцов | Убрать лишние |
 | Пустые страницы | Лишние `---` перед H2 | Убрать hr |
 
+### 5. Проверка отсутствия локальных ссылок
+
+После рендеринга PDF не должен содержать `file:///` или `D:/DariaGalactic` — иначе картинки не загрузятся в Drive/Web.
+
+```powershell
+python -c "data=open(r'<pdf>','rb').read(); print('file:///', b'file:///' in data); print('D:/', b'D:/DariaGalactic' in data)"
+```
+
+Оба значения должны быть `False`.
+
 ## Зависимости
 
 - Python 3, pandoc (в PATH), Google Chrome (headless)
-- Скрипт: `.cursor/skills/5-pdf/generate_pdf.py`
+- Скрипты:
+  - `.cursor/skills/5-pdf/generate_pdf.py` — миссия
+  - `.cursor/skills/5-pdf/generate_money_pdf.py` — ДНК денег

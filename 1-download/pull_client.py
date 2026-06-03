@@ -462,28 +462,18 @@ def pick_mission(missions: list[dict], contract: str | None,
 
 # ── Sync helpers ─────────────────────────────────────────────────────
 def sync_folder_to_local(service, folder_id: str, folder_name: str, out_root: Path,
-                         require_chart_csv: bool = False) -> dict:
+                         require_chart_csv: bool = False,
+                         force: bool = False) -> dict:
     """Синкает содержимое Drive-папки в локальную <out_root>/<folder_name>/.
+
+    force=False (по умолчанию): скачивает только то, чего нет локально.
+    force=True (--force):       перекачивает ВСЁ содержимое папки заново.
 
     Returns: dict {
         downloaded: int, skipped: int,
         has_chart_csv: bool, has_ai_report: bool,
         ai_report_files: list[str],
     }
-    Если require_chart_csv=True и в папке нет CSV-карты — синк пропускается
-    и возвращается has_chart_csv=False, downloaded=0.
-
-    Качаем ВСЁ что в папке клиента (кроме nested folders):
-      • karta_*.csv     — натальная карта от кабинета (Variant B);
-      • chart.csv       — legacy имя той же карты;
-      • <Имя>_<ddmmyyyy>_<slug>.md   — AI-разбор от intergalactic-agent
-        (slug = «миссия» | «деньги»). Пример: `Литиос_04071985_миссия.md`.
-        Дарья проверяет это локально в Профайлы клиентов/<folder>/<.md>.
-      • PDF / png / прочее — артефакты, которые Дарья сама положила в
-        папку (готовый разбор, картинка, summary).
-
-    AI-разбор детектируется как `*_миссия.md` или `*_деньги.md`, либо
-    любой `*.md` (для будущих продуктов).
     """
     files = list_folder_files(service, folder_id)
     has_chart_csv = any(
@@ -503,12 +493,11 @@ def sync_folder_to_local(service, folder_id: str, folder_name: str, out_root: Pa
             continue
         name = f['name']
         dest = out_dir / name
-        # Детектим AI-разбор от intergalactic-agent: *_миссия.md / *_деньги.md.
         if name.lower().endswith('.md') and (
             '_миссия' in name or '_деньги' in name or '_mission' in name.lower()
         ):
             ai_report_files.append(name)
-        if dest.exists() and dest.stat().st_size > 0:
+        if not force and dest.exists() and dest.stat().st_size > 0:
             skipped += 1
             continue
         download_file(service, f['id'], dest)
@@ -605,7 +594,8 @@ def run_single(args):
 
     try:
         result = sync_folder_to_local(
-            service, folder_id, folder_name, out_root, require_chart_csv=False,
+            service, folder_id, folder_name, out_root,
+            require_chart_csv=False, force=getattr(args, 'force', False),
         )
     except Exception as e:
         sys.exit(
@@ -671,7 +661,8 @@ def run_all(args):
         name = f['name']
         try:
             r = sync_folder_to_local(
-                service, f['id'], name, out_root, require_chart_csv=True,
+                service, f['id'], name, out_root,
+                require_chart_csv=True, force=getattr(args, 'force', False),
             )
         except Exception as e:
             print(f'   ! {name:50s} sync error: {e}')
@@ -737,6 +728,8 @@ def main():
                     help='Только regen CSV для клиента (без download). '
                          'Воркер заливает CSV из KV, либо скрипт открывает '
                          'autoCsvUrl в headless Chromium и повторяет.')
+    ap.add_argument('--force', action='store_true',
+                    help='Перекачать ВСЁ содержимое папки заново (даже если файлы уже есть локально).')
     ap.add_argument('--no-regen', action='store_true',
                     help='В точечном режиме отключить авто-regen, если у миссии нет CSV.')
     ap.add_argument('--regen-timeout', default=30, type=int,

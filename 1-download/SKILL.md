@@ -27,7 +27,7 @@ description: Скачивание новых карт клиентов с Google
 .cursor/skills/1-download/pull_client.py
 ```
 
-## Три режима запуска
+## Режимы запуска
 
 ### 1. Батч (ежедневный синк)
 
@@ -53,6 +53,18 @@ python ".cursor/skills/1-download/pull_client.py" <email> --contract <contractId
 python ".cursor/skills/1-download/pull_client.py" <email> --product mission
 python ".cursor/skills/1-download/pull_client.py" <email> --product money_dna
 ```
+
+### Флаг --force (полная перекачка)
+
+Добавь `--force` к любой команде, чтобы перекачать ВСЁ содержимое папки заново, даже если файлы уже есть локально:
+
+```powershell
+python ".cursor/skills/1-download/pull_client.py" --all --force
+python ".cursor/skills/1-download/pull_client.py" <email> --force
+```
+
+Без `--force` — скачивается только то, чего нет (по умолчанию).
+С `--force` — перезаписываются все файлы актуальными версиями из Google Drive.
 
 ### 3. Генерация CSV (если Worker не создал)
 

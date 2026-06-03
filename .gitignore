@@ -2,3 +2,6 @@
 *.pyc
 4-image/Generated_image.png
 */Generated_image.png
+
+# Клиентские данные — не коммитить
+DariaGalactic/
