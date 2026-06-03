@@ -190,7 +190,7 @@ description: Создание полного разбора ДНК денег п
 
 **10j. ⛔ ГЕЙТ-ВАЛИДАТОР ПЕРЕД ПОКАЗОМ.** Перед показом Дарье ОБЯЗАТЕЛЬНО запустить:
 ```
-python .cursor/tools/money_validate.py "<путь к *_деньги.md>"
+python .cursor/skills/2-money-analysis/money_validate.py "<путь к *_деньги.md>"
 ```
 Вывод показать в чат. Пока есть хоть один `[FAIL]` — показывать ЗАПРЕЩЕНО. Скелет-шаблон для заполнения: `.cursor/skills/2-money-analysis/money_template.md`.
 
