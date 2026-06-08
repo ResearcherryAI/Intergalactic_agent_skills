@@ -198,6 +198,8 @@ def lookup_sheet_row_for_mission(sheets, email: str, contract_hint: str = '',
         return None
     if product_code == 'money_dna':
         product_keywords = ('архитектур', 'денег', '50.56')
+    elif product_code == 'love':
+        product_keywords = ('неземной любв', 'неземная любв', 'код 44', 'любви', 'love_dna')
     else:
         product_keywords = ('миссия', 'миссии')
 
@@ -379,7 +381,12 @@ def find_pdf(client_dir: Path, product_code: str = 'mission') -> Path | None:
     Fallback на *.pdf оставлен как safety net — берём самый свежий по mtime,
     при равенстве — лексикографически старший по имени (имена содержат timestamp).
     """
-    suffix = '*_деньги.pdf' if product_code == 'money_dna' else '*_миссия.pdf'
+    if product_code == 'money_dna':
+        suffix = '*_деньги.pdf'
+    elif product_code == 'love':
+        suffix = '*_любовь.pdf'
+    else:
+        suffix = '*_миссия.pdf'
     candidates = _latest(client_dir.glob(suffix))
     if candidates:
         return candidates[0]
@@ -389,7 +396,18 @@ def find_pdf(client_dir: Path, product_code: str = 'mission') -> Path | None:
     return pdfs[0] if pdfs else None
 
 
-def find_cover_image(client_dir: Path) -> Path | None:
+def find_cover_image(client_dir: Path, product_code: str = 'mission') -> Path | None:
+    # Для love обложка — отдельная любовная картинка, НЕ Generated_image.png
+    # (она занята денежной/миссийной обложкой, когда продукты в одной папке).
+    if product_code == 'love':
+        for name in ('Generated_image_love.png', 'love_cover.png'):
+            p = client_dir / name
+            if p.exists():
+                return p
+        love_pngs = _latest(client_dir.glob('*любов*.png'))
+        if love_pngs:
+            return love_pngs[0]
+        return None
     for name in ('Generated_image.png', 'cover.png', 'cover.jpg', 'cover.jpeg'):
         p = client_dir / name
         if p.exists():
@@ -398,7 +416,12 @@ def find_cover_image(client_dir: Path) -> Path | None:
     return pngs[0] if pngs else None
 
 
-def find_summary(client_dir: Path) -> Path | None:
+def find_summary(client_dir: Path, product_code: str = 'mission') -> Path | None:
+    # Для love — отдельный summary_love.md, чтобы не переиспользовать
+    # денежный/миссийный summary.md, когда продукты лежат в одной папке.
+    if product_code == 'love':
+        p = client_dir / 'summary_love.md'
+        return p if p.exists() else None
     p = client_dir / 'summary.md'
     return p if p.exists() else None
 
@@ -621,12 +644,17 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
     # FIX-28: префикс файлов и R2-ключей зависит от продукта.
     # mission → mission_<slug>_<ts>.pdf, R2 mission/<contract>/...
     # money_dna → money_dna_<slug>_<ts>.pdf, R2 money_dna/<contract>/...
-    prefix = 'money_dna' if product_code == 'money_dna' else 'mission'
-    expected_suffix = '*_деньги.pdf' if product_code == 'money_dna' else '*_миссия.pdf'
+    prefix = product_code if product_code in ('money_dna', 'love') else 'mission'
+    if product_code == 'money_dna':
+        expected_suffix = '*_деньги.pdf'
+    elif product_code == 'love':
+        expected_suffix = '*_любовь.pdf'
+    else:
+        expected_suffix = '*_миссия.pdf'
 
     pdf_path = find_pdf(client_dir, product_code)
-    cover_path = find_cover_image(client_dir)
-    summary_path = find_summary(client_dir)
+    cover_path = find_cover_image(client_dir, product_code)
+    summary_path = find_summary(client_dir, product_code)
 
     if not pdf_path:
         sys.exit(f'В {client_dir} не найден {expected_suffix}')
@@ -847,13 +875,14 @@ def main():
     args = new_args
     if product_code is None:
         sys.exit(
-            'СТОП: --product обязателен. Укажите --product mission или --product money_dna.\n'
+            'СТОП: --product обязателен. Укажите --product mission, money_dna или love.\n'
             'Значение брать из колонки D Sheet:\n'
             '  «Анализ миссии звёздной души» → --product mission\n'
-            '  «Архитектура Денег — код 50.56» → --product money_dna'
+            '  «Архитектура Денег — код 50.56» → --product money_dna\n'
+            '  «ДНК неземной любви — код 44» → --product love'
         )
-    if product_code not in ('mission', 'money_dna'):
-        sys.exit(f'--product должен быть mission или money_dna, не {product_code!r}')
+    if product_code not in ('mission', 'money_dna', 'love'):
+        sys.exit(f'--product должен быть mission, money_dna или love, не {product_code!r}')
 
     if len(args) < 2:
         print(__doc__)

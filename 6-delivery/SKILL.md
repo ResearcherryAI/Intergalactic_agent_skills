@@ -17,9 +17,10 @@ description: Отправка готового разбора миссии в л
 
 **Общие пункты (для любого продукта):**
 
-- [ ] Флаг `--product` указан явно (`mission` или `money_dna`). Брать значение из колонки D Sheet:
+- [ ] Флаг `--product` указан явно (`mission`, `money_dna` или `love`). Брать значение из колонки D Sheet:
   - «Анализ миссии звёздной души» → `--product mission`
   - «Архитектура Денег — код 50.56» → `--product money_dna`
+  - «ДНК неземной любви — код 44» → `--product love`
   - Без флага НЕ запускать (даже если у клиента только один продукт).
 - [ ] `summary.md` существует, frontmatter валиден (3 секции)
 - [ ] `Generated_image.png` существует, >100KB
@@ -45,6 +46,15 @@ description: Отправка готового разбора миссии в л
 - [ ] `Generated_image.png` существует (это требуется для `--product money_dna`, парсер ищет именно `Generated_image.png` как cover)
 - [ ] **`Generated_image.png` — это ИМЕННО картинка ДНК денег**, а не обложка миссии. Если в папке клиента уже есть `mission_*_cover.png` или `<Имя>_финансовая_ДНК.png` — сравнить размеры с `Generated_image.png`. Если совпадают с обложкой миссии — заменить на финансовую ДНК.
 - [ ] **`summary.md` существует в ЭТОЙ ЖЕ папке (money).** Без `summary.md` скрипт НЕ загрузит обложку в R2 (шаг 4–6 будет пропущен) и сайт покажет СТАРУЮ картинку. Это критично: `summary.md` = триггер для R2-обложки. Если его нет — создать ПЕРЕД запуском delivery по шаблону (frontmatter + 3 секции: «Ваш дар», «Ваш вызов», «Что делать»).
+
+**Для `--product love` (ДНК неземной любви — код 44):**
+
+- [ ] `<Имя>_<DDMMYYYY>_любовь.pdf` существует, **>500KB** (собран через `generate_money_pdf.py` с `--header "...Алгоритм любви"`)
+- [ ] PDF не содержит локальных ссылок (`file:///`, `D:/DariaGalactic`)
+- [ ] `<Имя>_<DDMMYYYY>_любовь.md` существует, валидация любви пройдена
+- [ ] Любовная обложка лежит ОТДЕЛЬНО от денежной/миссийной: имя содержит «любовь» (`<Имя>_<DDMMYYYY>_любовь_ДНК.png`) или `Generated_image_love.png`. Скрипт для love НЕ берёт `Generated_image.png` (она занята деньгами/миссией, когда продукты в одной папке).
+- [ ] `summary_love.md` существует в той же папке (отдельный от `summary.md`; иначе кабинет не покажет inline-preview любви). Frontmatter + 3 секции «Ваш дар / Ваш вызов / Что делать».
+- [ ] Воркер `intergalactic-cabinet` задеплоен с поддержкой `productCode: love` (FIX-44) и фронт `4_сайт/me/me.js` + `product_catalog.json` (продукт `love`) выкачены. Без деплоя кабинет не покажет отдельный блок любви.
 
 **Нормализация имён файлов перед запуском (`--product money_dna`):**
 
@@ -90,6 +100,7 @@ python ".cursor/skills/6-delivery/deliver_mission.py" --yes client@mail.ru "D:\D
 ```powershell
 python ".cursor/skills/6-delivery/deliver_mission.py" --yes --product mission <email> "<папка>"
 python ".cursor/skills/6-delivery/deliver_mission.py" --yes --product money_dna <email> "<папка>"
+python ".cursor/skills/6-delivery/deliver_mission.py" --yes --product love <email> "<папка>"
 ```
 
 Без `--product` по умолчанию = `mission` (обратная совместимость). Скрипт фильтрует строки Sheet по ключевым словам колонки D:
