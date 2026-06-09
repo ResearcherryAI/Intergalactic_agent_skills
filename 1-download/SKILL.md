@@ -114,8 +114,9 @@ D:\DariaGalactic\Профайлы клиентов\Купившие разбор
 
 ## Авторизация
 
-- OAuth-токен: `DariaGalactic/config/gdrive_token.json`
-- Если `DariaGalactic/config` пустой или удалён, восстановить runtime-креды из приватного репозитория `https://github.com/ResearcherryAI/Intergalacticcreds.git`: `.env`, `client_secret_*.json`, `gdrive_token.json`, `cabinet_sheet_token.json`.
+- OAuth-токен: `токены/gdrive_token.json` внутри репо скиллов.
+- Если `токены/` пустая или удалена, восстановить runtime-креды из приватного репозитория `https://github.com/ResearcherryAI/Intergalacticcreds.git`: `.env`, `client_secret_*.json`, `gdrive_token.json`, `cabinet_sheet_token.json`.
+- Cloudflare deploy-токены, которые меняют код воркеров, в `токены/` не копировать.
 - Аккаунт: `interviewkotilev@gmail.com`
 - Если 404 при list/download → удалить `gdrive_token.json`, запустить снова, в браузере выбрать правильный аккаунт
 
@@ -125,7 +126,7 @@ D:\DariaGalactic\Профайлы клиентов\Купившие разбор
 |---|---|---|
 | 404 на list/download | Токен от другого аккаунта | Удалить `gdrive_token.json`, перезапустить |
 | Пустая папка (нет CSV) | Worker ещё не создал карту | `--regen-csv-for <email>` или подождать |
-| `FileNotFoundError: config/` | Нет секретов | Восстановить из `DariaGalactic/config/secrets.local.md` |
+| `FileNotFoundError: токены/` | Нет секретов | Восстановить runtime-креды в `токены/` |
 
 ## ⛔ ГЕЙТ: Запрет на удаление с GDrive и локально
 

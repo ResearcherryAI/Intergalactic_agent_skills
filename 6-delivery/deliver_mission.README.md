@@ -172,20 +172,20 @@ legacy-режим без обложки/summary.)
 
 ## 4. Один раз: настройка машины
 
-Все доступы лежат в одной папке `DariaGalactic/config/` внутри агентского
-проекта. Эта папка в `.gitignore` — наружу не уходит.
+Все runtime-доступы для pull/delivery лежат в одной папке `токены/` внутри
+репо скиллов. Эта папка в `.gitignore` — наружу не уходит.
 
 ```
-intergalacticAstoAgent/DariaGalactic/config/
+Скиллы разборов/Разбор миссии/токены/
 ├── client_secret_*.json     ← OAuth ключ Google (выдаёт Кирилл)
 ├── .env                     ← WORKER_URL, ADMIN_SECRET, GDRIVE_FOLDER_ID
-├── secrets.local.md         ← мастер-копия всех ключей
 ├── gdrive_token.json        ← создаётся автоматически после первого запуска
 └── cabinet_sheet_token.json ← создаётся автоматически после первого запуска
 ```
 
-Если что-то отсутствует — открой `secrets.local.md` (там есть всё для
-восстановления) или попроси Кирилла прислать `client_secret_*.json`.
+Если что-то отсутствует — восстанови runtime-креды в `токены/` из приватного
+репозитория с кредами или попроси Кирилла прислать нужный файл. Cloudflare
+deploy-токены, которые меняют код воркеров, в `токены/` не копировать.
 
 ### Зависимости (один раз)
 
@@ -215,8 +215,8 @@ email. Если строки нет — webhook от LavaTop не дошёл, п
 LavaTop API). Если статус не меняется — пиши Кириллу.
 
 **Скрипт ругается «admin auth failed» / 401** — значение `ADMIN_SECRET`
-в `.env` не совпадает с тем, что в Cloudflare. Возьми актуальный из
-`intergalacticAstoAgent/DariaGalactic/config/secrets.local.md`.
+в `токены/.env` не совпадает с тем, что в Cloudflare. Возьми актуальный
+runtime-секрет и обнови `токены/.env`.
 
 **Скрипт упал на загрузке в Drive** — проверь, что файл существует,
 интернет работает, и `gdrive_token.json` не повреждён (можно удалить и
@@ -311,5 +311,5 @@ curl -X POST https://cabinet.intergalactic-astrology.com/admin/mission \
   - `lead:<email>` — данные формы до оплаты (удаляется после `payment.success`);
   - `lead-contract:<contractId>` → email — индекс для слияния лида с оплатой;
   - `webhook:log` — последние 30 событий от LavaTop, для дебага.
-- Все секреты — в Cloudflare Worker → Settings → Variables and Secrets,
-  и в `intergalacticAstoAgent/DariaGalactic/config/secrets.local.md` локально.
+- Runtime-секреты для pull/delivery — в `токены/` внутри скиллов.
+  Cloudflare Worker secrets — в Cloudflare Worker → Settings → Variables and Secrets.

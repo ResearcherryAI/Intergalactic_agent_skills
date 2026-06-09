@@ -51,9 +51,11 @@ pull_client.py — подтянуть клиента после оплаты в 
     То же самое в точечном режиме делается автоматически (можно
     отключить флагом `--no-regen`).
 
-Конфиги: `4_Intergalactic_asto/intergalactic_workers_ai/config/` (см. deliver_mission.py):
+Токены: `Скиллы разборов/Разбор миссии/токены/` (см. deliver_mission.py):
   • .env — WORKER_URL=https://cabinet.intergalactic-astrology.com
-  • full_drive_token.json — полный scope drive (reauth_full_drive.py)
+  • gdrive_token.json — Google Drive OAuth token с полным scope drive
+  • cabinet_sheet_token.json — Google Sheets token
+  • client_secret_*.json — OAuth Desktop app
 
 Зависимости (те же, что у deliver_mission.py):
   python3 -m pip install --upgrade google-api-python-client \\
@@ -80,17 +82,14 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILLS_MISSION_ROOT = SCRIPT_DIR.parent
-ASTO_ROOT = Path(os.environ.get(
-    'PRODUCTY_ROOT',
-    str(SKILLS_MISSION_ROOT.parent.parent),
-))
-CONFIG_DIR = ASTO_ROOT / 'intergalactic_workers_ai' / 'config'
-if not CONFIG_DIR.exists():
-    CONFIG_DIR = ASTO_ROOT / 'DariaGalactic' / 'config'
+TOKENS_DIR = Path(os.environ.get(
+    'SKILLS_TOKENS_DIR',
+    str(SKILLS_MISSION_ROOT / 'токены'),
+)).expanduser()
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(CONFIG_DIR / '.env')
+    load_dotenv(TOKENS_DIR / '.env')
 except ImportError:
     pass
 
@@ -112,23 +111,23 @@ DEFAULT_LOCAL_ROOT = Path(os.environ.get(
     ),
 ))
 
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-TOKEN_FILE = CONFIG_DIR / 'gdrive_token.json'
+SCOPES = ['https://www.googleapis.com/auth/drive']
+TOKEN_FILE = TOKENS_DIR / 'gdrive_token.json'
 
 
 # ── Google Drive auth (та же логика, что и в deliver_mission.py) ─────
 def find_client_secret() -> Path:
-    candidates = sorted(CONFIG_DIR.glob('client_secret*.json'))
+    candidates = sorted(TOKENS_DIR.glob('client_secret*.json'))
     if not candidates:
         sys.exit(
-            f'client_secret_*.json не найден в {CONFIG_DIR}.\n'
-            'Скопируйте OAuth client (Desktop app) JSON туда.'
+            f'client_secret_*.json не найден в {TOKENS_DIR}.\n'
+            'Скопируйте OAuth client (Desktop app) JSON в папку токенов.'
         )
     return candidates[0]
 
 
 def get_drive_service():
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    TOKENS_DIR.mkdir(parents=True, exist_ok=True)
     creds = None
     if TOKEN_FILE.exists():
         creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
@@ -202,7 +201,7 @@ def fallback_birth_csv(mission: dict, email: str) -> str:
 # ── Worker API ───────────────────────────────────────────────────────
 def admin_headers() -> dict:
     if not ADMIN_SECRET:
-        sys.exit('ADMIN_SECRET не задан в .env (DariaGalactic/config/.env).')
+        sys.exit(f'ADMIN_SECRET не задан в {TOKENS_DIR / ".env"}.')
     return {'X-Admin-Key': ADMIN_SECRET, 'Content-Type': 'application/json'}
 
 
@@ -598,7 +597,7 @@ def run_single(args):
             f'\n!! Не удалось прочитать содержимое Drive-папки: {e}\n'
             'Скорее всего gdrive_token.json авторизован НЕ на тот аккаунт,\n'
             'на котором Worker создал папку. Проверьте: Worker работает под\n'
-            '«interviewkotilev@gmail.com». Удалите gdrive_token.json и\n'
+            f'«interviewkotilev@gmail.com». Удалите {TOKEN_FILE} и\n'
             'переавторизуйтесь под этим же аккаунтом.'
         )
     print(f'→ Скачано: {result["downloaded"]}, пропущено (уже есть): {result["skipped"]}')

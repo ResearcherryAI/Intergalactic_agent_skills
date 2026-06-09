@@ -9,3 +9,5 @@ DariaGalactic/
 # Runtime-секреты для локального запуска delivery/pull
 config/*.json
 config/.env
+токены/*.json
+токены/.env

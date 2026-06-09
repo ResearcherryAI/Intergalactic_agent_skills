@@ -82,7 +82,7 @@
 - **J–R** — выдумка/имена звёзд из CSV, расчёты, рассуждения агента/ранжирование сил, 1 услуга/раздел, копипаст «курсы», цивилизация на Асценденте, соединения 1-го дома, книга у цивилизаций.
 - **S–W** — орб=CSV (S), своё соединение раздела раскрыто как цивилизация (T), Энергодуш по смыслу не «прибит» к Сатурну (U), конкретные профессии в т.ч. в 11 сферах (V, WARN), стеллиумы раскрыты как взаимосвязь, не по одиночке (W).
 
-Все скрипты используют `PRODUCTY_ROOT` (env) или `~/Desktop/Producty` для поиска конфига в `DariaGalactic/config/`.
+Все скрипты pull/delivery берут runtime-доступы из локальной папки `токены/` внутри этого репо скиллов.
 Клиентские профайлы по умолчанию лежат на `D:\DariaGalactic\Профайлы клиентов`; переменная `CLIENT_PROFILES_DIR` может переопределить путь.
 
 ### Запуск `deliver_mission.py`
@@ -142,15 +142,15 @@ D:\DariaGalactic\Профайлы клиентов\.git\
 
 ## Конфиг
 
-`config/` внутри папки скиллов — `.env`, `gdrive_token.json`, `client_secret_*.json`, `cabinet_sheet_token.json`.
+`токены/` внутри папки скиллов — `.env`, `gdrive_token.json`, `client_secret_*.json`, `cabinet_sheet_token.json`.
 
-Если папка конфигов удалена или машина новая, runtime-креды восстанавливаются из приватного репозитория `https://github.com/ResearcherryAI/Intergalacticcreds.git`. Для `pull_client.py` и `deliver_mission.py` копировать только релевантные файлы:
+Если папка токенов удалена или машина новая, runtime-креды восстанавливаются из приватного репозитория `https://github.com/ResearcherryAI/Intergalacticcreds.git`. Для `pull_client.py` и `deliver_mission.py` копировать только релевантные файлы в `токены/`:
 - `.env`
 - `client_secret_*.json`
 - `gdrive_token.json`
 - `cabinet_sheet_token.json`
 
-Мастер-копии секретов, Cloudflare local-файлы и admin-drive токены не копировать без отдельной необходимости.
+Мастер-копии секретов, Cloudflare local-файлы для деплоя воркеров, `cloudflare_api_token.local` и admin-drive токены сюда не копировать.
 
 ## Лог ошибок пайплайна ДНК денег
 

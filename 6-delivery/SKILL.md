@@ -78,9 +78,9 @@ Rename-Item "<папка>\<Имя>_<DDMMYYYY>_финансовая_ДНК.png" "
 .cursor/skills/6-delivery/deliver_mission.py
 ```
 
-Конфиг: `DariaGalactic/config/` — `.env`, `client_secret_*.json`, `gdrive_token.json`, `cabinet_sheet_token.json`.
+Токены: `токены/` внутри репо скиллов — `.env`, `client_secret_*.json`, `gdrive_token.json`, `cabinet_sheet_token.json`.
 
-Если конфиг удалён или машина новая, восстановить runtime-креды из приватного репозитория `https://github.com/ResearcherryAI/Intergalacticcreds.git`. Для delivery нужны только `.env`, `client_secret_*.json`, `gdrive_token.json`, `cabinet_sheet_token.json`; мастер-секреты и admin-drive токены не копировать без отдельной необходимости.
+Если папка `токены/` удалена или машина новая, восстановить runtime-креды из приватного репозитория `https://github.com/ResearcherryAI/Intergalacticcreds.git`. Для delivery нужны только `.env`, `client_secret_*.json`, `gdrive_token.json`, `cabinet_sheet_token.json`. Cloudflare deploy-токены, которые меняют код воркеров, сюда не копировать.
 
 ## Формат вызова
 
@@ -273,7 +273,7 @@ cover: Generated_image.png
 |---|---|---|
 | `СТОП: для этого email нет строки…` | Email не найден | Перечитать Sheet |
 | 401 Unauthorized | Протух токен | Удалить `gdrive_token.json`, перезапустить |
-| R2 upload failed | CF токен / bucket | Проверить `.env` |
+| R2 upload failed | R2 token / bucket | Проверить `токены/.env`; deploy-токен воркеров сюда не класть |
 | Worker POST failed | Worker недоступен | Проверить `WORKER_URL` |
 | `отсутствует frontmatter` | Формат `summary.md` | Пересобрать по контракту выше |
 

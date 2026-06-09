@@ -49,10 +49,11 @@ deliver_mission.README.md. Было 3 инцидента, когда отпра�
 Обратная совместимость: если вторым аргументом передан *.pdf, скрипт работает
 по старой логике (только Drive + статус ready без inline-preview).
 
-Конфиги: `4_Intergalactic_asto/intergalactic_workers_ai/config/` (.gitignore):
+Токены: `Скиллы разборов/Разбор миссии/токены/` (.gitignore):
   • .env — WORKER_URL=https://cabinet.intergalactic-astrology.com
-  • full_drive_token.json — полный scope drive (reauth_full_drive.py)
-  • CLOUDFLARE_* для R2 inline-preview в кабинете
+  • gdrive_token.json — Google Drive OAuth token с полным scope drive
+  • cabinet_sheet_token.json — Google Sheets token
+  • client_secret_*.json — OAuth Desktop app
 
 Установка зависимостей (один раз):
   python3 -m pip install --upgrade google-api-python-client google-auth-httplib2 \\
@@ -77,20 +78,14 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILLS_MISSION_ROOT = SCRIPT_DIR.parent
-ASTO_ROOT = Path(os.environ.get(
-    'PRODUCTY_ROOT',
-    str(SKILLS_MISSION_ROOT.parent.parent),
-))
-CONFIG_DIR = ASTO_ROOT / 'intergalactic_workers_ai' / 'config'
-SKILL_CONFIG_DIR = SKILLS_MISSION_ROOT / 'config'
-if SKILL_CONFIG_DIR.exists():
-    CONFIG_DIR = SKILL_CONFIG_DIR
-elif not CONFIG_DIR.exists():
-    CONFIG_DIR = ASTO_ROOT / 'DariaGalactic' / 'config'
+TOKENS_DIR = Path(os.environ.get(
+    'SKILLS_TOKENS_DIR',
+    str(SKILLS_MISSION_ROOT / 'токены'),
+)).expanduser()
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(CONFIG_DIR / '.env')
+    load_dotenv(TOKENS_DIR / '.env')
 except ImportError:
     pass
 
@@ -106,13 +101,13 @@ CF_ACCOUNT_ID = os.environ.get('CLOUDFLARE_ACCOUNT_ID', '')
 CF_R2_BUCKET = os.environ.get('CLOUDFLARE_R2_BUCKET', 'mission-content')
 CF_R2_TOKEN = os.environ.get('CLOUDFLARE_R2_TOKEN', '')
 
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
-TOKEN_FILE = CONFIG_DIR / 'gdrive_token.json'
+SCOPES = ['https://www.googleapis.com/auth/drive']
+TOKEN_FILE = TOKENS_DIR / 'gdrive_token.json'
 
 # Sheets API: используется для прямой записи в колонку O («Папка клиента
 # в Drive») и для лукапа contractId/sheetRow по email. Токен лежит
 # отдельно (`cabinet_sheet_token.json`) и имеет scope `spreadsheets`.
-SHEETS_TOKEN_FILE = CONFIG_DIR / 'cabinet_sheet_token.json'
+SHEETS_TOKEN_FILE = TOKENS_DIR / 'cabinet_sheet_token.json'
 SHEETS_SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 SHEET_ID = os.environ.get('SHEET_ID', '1X2voXTHnywDHXk1BRVNsYktrL8MtXHqxl6jhwymLzWE')
 SHEET_TAB = os.environ.get('SHEET_TAB', 'Покупки')
@@ -126,17 +121,17 @@ COVER_WEBP_QUALITY = 78
 
 # ── Google Drive auth ────────────────────────────────────────────────
 def find_client_secret() -> Path:
-    candidates = sorted(CONFIG_DIR.glob('client_secret*.json'))
+    candidates = sorted(TOKENS_DIR.glob('client_secret*.json'))
     if not candidates:
         sys.exit(
-            f'client_secret_*.json не найден в {CONFIG_DIR}.\n'
-            'Скопируйте OAuth client (Desktop app) JSON из Google Cloud Console туда.'
+            f'client_secret_*.json не найден в {TOKENS_DIR}.\n'
+            'Скопируйте OAuth client (Desktop app) JSON в папку токенов.'
         )
     return candidates[0]
 
 
 def get_drive_service():
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    TOKENS_DIR.mkdir(parents=True, exist_ok=True)
     creds = None
     if TOKEN_FILE.exists():
         creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
@@ -644,7 +639,7 @@ def r2_put(key: str, body: bytes, content_type: str) -> None:
 # ── Worker notify ────────────────────────────────────────────────────
 def notify_worker(payload: dict) -> dict:
     if not ADMIN_SECRET:
-        sys.exit('ADMIN_SECRET не задан в .env (получите у разработчика).')
+        sys.exit(f'ADMIN_SECRET не задан в {TOKENS_DIR / ".env"} (получите у разработчика).')
     r = requests.post(
         WORKER_URL.rstrip('/') + '/admin/mission',
         headers={'X-Admin-Key': ADMIN_SECRET, 'Content-Type': 'application/json'},

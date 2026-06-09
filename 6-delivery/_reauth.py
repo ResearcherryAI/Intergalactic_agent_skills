@@ -10,7 +10,7 @@ auth_url с новым state, из-за чего возникает MismatchingS
 """
 import os
 # Разрешить, чтобы Google вернул больше scopes, чем мы запросили
-# (если у токена уже выписан drive.file, Google вернёт drive + drive.file).
+# (если у токена уже выписан старый scope, Google может вернуть оба).
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
 import sys
@@ -22,18 +22,21 @@ from dotenv import load_dotenv
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
-CONFIG = Path(__file__).resolve().parent.parent.parent.parent / 'DariaGalactic' / 'config'
-load_dotenv(CONFIG / '.env')
+TOKENS_DIR = Path(os.environ.get(
+    'SKILLS_TOKENS_DIR',
+    str(Path(__file__).resolve().parent.parent / 'токены'),
+)).expanduser()
+load_dotenv(TOKENS_DIR / '.env')
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-cs = sorted(CONFIG.glob('client_secret*.json'))[0]
+cs = sorted(TOKENS_DIR.glob('client_secret*.json'))[0]
 SCOPES = ['https://www.googleapis.com/auth/drive']
 REDIRECT_PORT = 8888
 REDIRECT_URI = f'http://localhost:{REDIRECT_PORT}/'
 
 print(f'Client secret: {cs.name}')
-print(f'Token will be saved to: {CONFIG / "gdrive_token.json"}')
+print(f'Token will be saved to: {TOKENS_DIR / "gdrive_token.json"}')
 print()
 sys.stdout.flush()
 
@@ -99,6 +102,6 @@ sys.stdout.flush()
 flow.fetch_token(code=received['code'])
 creds = flow.credentials
 
-(CONFIG / 'gdrive_token.json').write_text(creds.to_json())
+(TOKENS_DIR / 'gdrive_token.json').write_text(creds.to_json())
 print('\n=== Токен сохранён в gdrive_token.json ===')
 print(f'Scopes: {creds.scopes}')
