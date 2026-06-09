@@ -18,7 +18,7 @@
 
 ## Как работает полная цепочка pull → deliver → ЛК
 
-### Шаг 0. Клиент оплатил (воркер `intergalactic-cabinet`)
+### Шаг 0. Клиент оплатил (cabinet-v2, `cabinet.intergalactic-astrology.com`)
 
 После оплаты через LavaTop воркер автоматически:
 
@@ -181,7 +181,7 @@ Email клиенту + WhatsApp клиенту
 
 | Файл | Назначение |
 |---|---|
-| `.env` | `WORKER_URL`, `ADMIN_SECRET`, `GDRIVE_FOLDER_ID`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_BUCKET`, `CLOUDFLARE_R2_TOKEN`, `SHEET_ID` |
+| `.env` | `WORKER_URL=https://cabinet.intergalactic-astrology.com`, `ADMIN_SECRET`, `GDRIVE_FOLDER_ID`, … |
 | `client_secret_*.json` | OAuth Desktop app из Google Cloud Console |
 | `gdrive_token.json` | Авто-создаётся после первой авторизации (scope `drive` — полный). Переавторизация: `python .cursor/skills/6-delivery/_reauth.py` |
 | `cabinet_sheet_token.json` | Sheets scope токен для записи в таблицу |

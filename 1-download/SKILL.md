@@ -8,8 +8,8 @@ description: Скачивание новых карт клиентов с Google
 ## Что делает
 
 Скачивает папки оплативших клиентов из общей папки «Разборы» на Google Drive в единственную рабочую папку `D:\DariaGalactic\Профайлы клиентов\`. В каждой папке лежит:
-- `karta_<short>.csv` — натальная карта (создаёт **`intergalactic-cabinet`** после оплаты, статус Sheet G = `Оплата получена`)
-- `<Имя>_<ddmmyyyy>_миссия.md` — **готовый AI-разбор** (создаёт **`intergalactic-agent`** через n8n→Anthropic, ~5-7 мин после появления CSV, статус Sheet G = `Разбор АИ готов (на проверке у Кайи)`)
+- `karta_<short>.csv` — натальная карта (cabinet-v2 после оплаты, Sheet G = `Оплата получена`)
+- `<Имя>_<ddmmyyyy>_миссия.md` — AI-разбор (`intergalactic-ai-agent` → n8n R22, ~5–15 мин, Sheet G = `Разбор АИ готов (на проверке у Кайи)`)
 
 В Cursor эта же папка видна через символическую ссылку `DariaGalactic/Профайлы клиентов/`, но программы должны писать напрямую на диск D.
 
@@ -79,8 +79,8 @@ python ".cursor/skills/1-download/pull_client.py" --regen-csv-for <email>
 **На GDrive (`Разборы/`):**
 ```
 Разборы/<Имя>_<contract12>_<YYYYMMDD>/
-├── karta_<contract12>.csv               ← кладёт intergalactic-cabinet
-└── <Имя>_<ddmmyyyy>_миссия.md           ← кладёт intergalactic-agent (n8n→Anthropic)
+├── karta_<contract12>.csv               ← cabinet-v2
+└── <Имя>_<ddmmyyyy>_миссия.md           ← intergalactic-ai-agent (n8n R22)
 ```
 
 **Локально (после pull_client.py):**

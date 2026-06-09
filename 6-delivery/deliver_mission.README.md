@@ -204,7 +204,7 @@ python3 -m pip install --upgrade google-api-python-client google-auth-httplib2 \
 **Клиент пишет «не приходит письмо»** — попроси проверить «Спам».
 Письмо отправляется с `info@intergalacticastrology.com` через Resend.
 Если в спаме тоже нет — открой
-`https://intergalactic-cabinet.duduk12250405.workers.dev/admin/webhook-log`
+`https://cabinet.intergalactic-astrology.com/admin/webhook-log`
 с заголовком `X-Admin-Key` (значение в `secrets.local.md`) и проверь,
 ловил ли вообще Worker оплату. Если не ловил — пиши Кириллу.
 

@@ -2,12 +2,12 @@
 """
 pull_client.py — подтянуть клиента после оплаты в локальную папку.
 
-Что делает (Variant B + intergalactic-agent, актуальная версия 22.05.2026):
-  1. Cabinet (`intergalactic-cabinet`) сразу после оплаты создаёт подпапку
+Что делает (Variant B + intergalactic-ai-agent, prod июнь 2026):
+  1. Cabinet-v2 (`cabinet.intergalactic-astrology.com`) после оплаты создаёт подпапку
      клиента в общей Drive-папке «Разборы» (`GDRIVE_FOLDER_ID`) и кладёт
      туда `karta_<short>.csv` — натальную карту, посчитанную фронтом в
      скрытом iframe (Variant B). Sheet G = "Оплата получена".
-  2. Agent (`intergalactic-agent`, cron каждую минуту) видит новую
+  2. Ai-agent (`intergalactic-ai-agent`, handoff + cron) видит оплату,
      папку, дёргает n8n→Anthropic, кладёт `<Имя>_<ddmmyyyy>_<slug>.md`
      обратно в ту же папку клиента. Slug = `миссия` или `деньги`.
      Sheet G = "Разбор АИ готов (на проверке у Кайи)", M = ссылка на .md,
@@ -51,15 +51,9 @@ pull_client.py — подтянуть клиента после оплаты в 
     То же самое в точечном режиме делается автоматически (можно
     отключить флагом `--no-regen`).
 
-Конфиги (всё в DariaGalactic/config/, см. deliver_mission.py):
-  • .env c WORKER_URL, ADMIN_SECRET и GDRIVE_FOLDER_ID.
-  • client_secret_*.json + gdrive_token.json.
-
-Важно про авторизацию: локальный `gdrive_token.json` должен быть
-выписан на тот же Google-аккаунт, на котором авторизован Worker
-(`interviewkotilev@gmail.com`). Иначе drive.file scope не покажет
-файлы, созданные Worker'ом. Если токен на другом аккаунте —
-удалите `gdrive_token.json` и запустите скрипт ещё раз.
+Конфиги: `4_Intergalactic_asto/intergalactic_workers_ai/config/` (см. deliver_mission.py):
+  • .env — WORKER_URL=https://cabinet.intergalactic-astrology.com
+  • full_drive_token.json — полный scope drive (reauth_full_drive.py)
 
 Зависимости (те же, что у deliver_mission.py):
   python3 -m pip install --upgrade google-api-python-client \\
@@ -85,12 +79,14 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-AGENT_DIR = SCRIPT_DIR.parent  # .cursor/skills/
-_producty_root = Path(os.environ.get('PRODUCTY_ROOT', AGENT_DIR.parent.parent))
-CONFIG_DIR = _producty_root / 'DariaGalactic' / 'config'
+SKILLS_MISSION_ROOT = SCRIPT_DIR.parent
+ASTO_ROOT = Path(os.environ.get(
+    'PRODUCTY_ROOT',
+    str(SKILLS_MISSION_ROOT.parent.parent),
+))
+CONFIG_DIR = ASTO_ROOT / 'intergalactic_workers_ai' / 'config'
 if not CONFIG_DIR.exists():
-    # Fallback: старая логика для совместимости (когда конфиг рядом со скриптом).
-    CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
+    CONFIG_DIR = ASTO_ROOT / 'DariaGalactic' / 'config'
 
 try:
     from dotenv import load_dotenv
@@ -100,7 +96,7 @@ except ImportError:
 
 WORKER_URL = os.environ.get(
     'WORKER_URL',
-    'https://intergalactic-cabinet.duduk12250405.workers.dev',
+    'https://cabinet.intergalactic-astrology.com',
 ).rstrip('/')
 ADMIN_SECRET = os.environ.get('ADMIN_SECRET', '')
 
