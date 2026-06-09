@@ -5,3 +5,7 @@
 
 # Клиентские данные — не коммитить
 DariaGalactic/
+
+# Runtime-секреты для локального запуска delivery/pull
+config/*.json
+config/.env

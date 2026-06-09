@@ -49,11 +49,10 @@ deliver_mission.README.md. Было 3 инцидента, когда отпра�
 Обратная совместимость: если вторым аргументом передан *.pdf, скрипт работает
 по старой логике (только Drive + статус ready без inline-preview).
 
-Конфиги (всё в DariaGalactic/config — папка в .gitignore):
-  • client_secret_*.json — OAuth Desktop app из Google Cloud Console.
-  • .env с WORKER_URL, ADMIN_SECRET, GDRIVE_FOLDER_ID,
-    CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_R2_BUCKET, CLOUDFLARE_R2_TOKEN.
-  • gdrive_token.json создаётся автоматически после первой авторизации.
+Конфиги: `4_Intergalactic_asto/intergalactic_workers_ai/config/` (.gitignore):
+  • .env — WORKER_URL=https://cabinet.intergalactic-astrology.com
+  • full_drive_token.json — полный scope drive (reauth_full_drive.py)
+  • CLOUDFLARE_* для R2 inline-preview в кабинете
 
 Установка зависимостей (один раз):
   python3 -m pip install --upgrade google-api-python-client google-auth-httplib2 \\
@@ -77,8 +76,17 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-AGENT_DIR = SCRIPT_DIR.parent  # intergalacticAstoAgent/
-CONFIG_DIR = AGENT_DIR / 'DariaGalactic' / 'config'
+SKILLS_MISSION_ROOT = SCRIPT_DIR.parent
+ASTO_ROOT = Path(os.environ.get(
+    'PRODUCTY_ROOT',
+    str(SKILLS_MISSION_ROOT.parent.parent),
+))
+CONFIG_DIR = ASTO_ROOT / 'intergalactic_workers_ai' / 'config'
+SKILL_CONFIG_DIR = SKILLS_MISSION_ROOT / 'config'
+if SKILL_CONFIG_DIR.exists():
+    CONFIG_DIR = SKILL_CONFIG_DIR
+elif not CONFIG_DIR.exists():
+    CONFIG_DIR = ASTO_ROOT / 'DariaGalactic' / 'config'
 
 try:
     from dotenv import load_dotenv
@@ -89,7 +97,7 @@ except ImportError:
 # ── CONFIG ────────────────────────────────────────────────────────────
 WORKER_URL = os.environ.get(
     'WORKER_URL',
-    'https://intergalactic-cabinet.duduk12250405.workers.dev',
+    'https://cabinet.intergalactic-astrology.com',
 )
 ADMIN_SECRET = os.environ.get('ADMIN_SECRET', '')
 GDRIVE_FOLDER_ID = os.environ.get('GDRIVE_FOLDER_ID', '')
@@ -198,7 +206,7 @@ def lookup_sheet_row_for_mission(sheets, email: str, contract_hint: str = '',
         return None
     if product_code == 'money_dna':
         product_keywords = ('архитектур', 'денег', '50.56')
-    elif product_code == 'love':
+    elif product_code in ('love', 'love_dna'):
         product_keywords = ('неземной любв', 'неземная любв', 'код 44', 'любви', 'love_dna')
     else:
         product_keywords = ('миссия', 'миссии')
@@ -376,6 +384,16 @@ def _latest(paths):
     return sorted(paths, key=lambda p: p.name, reverse=True)
 
 
+def normalize_product_code(product_code: str) -> str:
+    """CLI alias: --product love хранится в ЛК как love_dna."""
+    return 'love_dna' if product_code == 'love' else product_code
+
+
+def local_product_kind(product_code: str) -> str:
+    """Локальные имена файлов: love и love_dna используют один формат."""
+    return 'love' if product_code == 'love_dna' else product_code
+
+
 def find_pdf(client_dir: Path, product_code: str = 'mission') -> Path | None:
     """FIX-28: ищем PDF по продукту. mission → *_миссия.pdf, money_dna → *_деньги.pdf.
     Fallback на *.pdf оставлен как safety net — берём самый свежий по mtime,
@@ -383,7 +401,7 @@ def find_pdf(client_dir: Path, product_code: str = 'mission') -> Path | None:
     """
     if product_code == 'money_dna':
         suffix = '*_деньги.pdf'
-    elif product_code == 'love':
+    elif local_product_kind(product_code) == 'love':
         suffix = '*_любовь.pdf'
     else:
         suffix = '*_миссия.pdf'
@@ -399,7 +417,7 @@ def find_pdf(client_dir: Path, product_code: str = 'mission') -> Path | None:
 def find_cover_image(client_dir: Path, product_code: str = 'mission') -> Path | None:
     # Для love обложка — отдельная любовная картинка, НЕ Generated_image.png
     # (она занята денежной/миссийной обложкой, когда продукты в одной папке).
-    if product_code == 'love':
+    if local_product_kind(product_code) == 'love':
         for name in ('Generated_image_love.png', 'love_cover.png'):
             p = client_dir / name
             if p.exists():
@@ -419,7 +437,7 @@ def find_cover_image(client_dir: Path, product_code: str = 'mission') -> Path | 
 def find_summary(client_dir: Path, product_code: str = 'mission') -> Path | None:
     # Для love — отдельный summary_love.md, чтобы не переиспользовать
     # денежный/миссийный summary.md, когда продукты лежат в одной папке.
-    if product_code == 'love':
+    if local_product_kind(product_code) == 'love':
         p = client_dir / 'summary_love.md'
         return p if p.exists() else None
     p = client_dir / 'summary.md'
@@ -644,10 +662,12 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
     # FIX-28: префикс файлов и R2-ключей зависит от продукта.
     # mission → mission_<slug>_<ts>.pdf, R2 mission/<contract>/...
     # money_dna → money_dna_<slug>_<ts>.pdf, R2 money_dna/<contract>/...
-    prefix = product_code if product_code in ('money_dna', 'love') else 'mission'
-    if product_code == 'money_dna':
+    worker_product_code = normalize_product_code(product_code)
+    kind = local_product_kind(worker_product_code)
+    prefix = worker_product_code if worker_product_code in ('money_dna', 'love_dna') else 'mission'
+    if kind == 'money_dna':
         expected_suffix = '*_деньги.pdf'
-    elif product_code == 'love':
+    elif kind == 'love':
         expected_suffix = '*_любовь.pdf'
     else:
         expected_suffix = '*_миссия.pdf'
@@ -676,7 +696,7 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
     # Лукап в Sheet — нужен contractId, sheetRow и dateHuman, чтобы
     # привязать аплоад к правильной строке и собрать имя папки клиента.
     # FIX-28: продукт-фильтр (mission | money_dna).
-    sheet_info = lookup_sheet_row_for_mission(sheets, email, contract_hint=contract_hint, product_code=product_code)
+    sheet_info = lookup_sheet_row_for_mission(sheets, email, contract_hint=contract_hint, product_code=worker_product_code)
 
     # CRITICAL: показать оператору данные клиента и заставить подтвердить.
     # Без этого блока было 3 инцидента «отправили не тому клиенту».
@@ -741,7 +761,7 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
         # FIX-31: явно говорим воркеру, какой продукт доставляем.
         # Без этого при первой доставке money_dna воркер не мог отличить
         # запись money_dna от mission и пропатчил mission Гастона.
-        'productCode': product_code,
+        'productCode': worker_product_code,
     }
     if contract_id:
         payload['contractId'] = contract_id
@@ -778,7 +798,7 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
 
     print('7) Обновляю личный кабинет (Worker /admin/mission)…')
     res = notify_worker(payload)
-    print(f'   OK: статус {product_code} для {email} → ready (inline-preview: '
+    print(f'   OK: статус {worker_product_code} для {email} → ready (inline-preview: '
           f'{"да" if payload.get("inlinePreview") else "нет"})')
     if res.get('sheetError'):
         print(f'   ⚠️  Sheet update warning: {res["sheetError"]}')
@@ -811,8 +831,9 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
 
 def deliver_legacy_pdf(email: str, pdf_path: Path, product_code: str = 'mission') -> None:
     """Старый режим — только PDF без R2."""
-    prefix = 'money_dna' if product_code == 'money_dna' else 'mission'
-    print(f'Product : {product_code}')
+    worker_product_code = normalize_product_code(product_code)
+    prefix = worker_product_code if worker_product_code in ('money_dna', 'love_dna') else 'mission'
+    print(f'Product : {worker_product_code}')
     print(f'Email   : {email}')
     print(f'PDF     : {pdf_path}')
     print(f'Worker  : {WORKER_URL}')
@@ -833,8 +854,9 @@ def deliver_legacy_pdf(email: str, pdf_path: Path, product_code: str = 'mission'
     res = notify_worker({
         'email': email, 'status': 'ready',
         'driveLink': drive_link, 'fileName': pdf_file['name'],
+        'productCode': worker_product_code,
     })
-    print(f'   OK: статус {product_code} для {email} → ready')
+    print(f'   OK: статус {worker_product_code} для {email} → ready')
     if res.get('emailSent'):
         print('   ✓ Письмо «разбор готов» отправлено клиенту.')
     elif res.get('emailError'):
@@ -881,8 +903,8 @@ def main():
             '  «Архитектура Денег — код 50.56» → --product money_dna\n'
             '  «ДНК неземной любви — код 44» → --product love'
         )
-    if product_code not in ('mission', 'money_dna', 'love'):
-        sys.exit(f'--product должен быть mission, money_dna или love, не {product_code!r}')
+    if product_code not in ('mission', 'money_dna', 'love', 'love_dna'):
+        sys.exit(f'--product должен быть mission, money_dna, love или love_dna, не {product_code!r}')
 
     if len(args) < 2:
         print(__doc__)
