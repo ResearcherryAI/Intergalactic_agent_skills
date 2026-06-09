@@ -6,10 +6,12 @@
 |---|---|---|---|
 | Анализ миссии звёздной души (код 37) | `mission` | `<Имя>_<DDMMYYYY>_миссия_v2.md` | `<Имя>_<DDMMYYYY>_миссия.pdf` |
 | Архитектура Денег (код 50.56) | `money_dna` | `<Имя>_<DDMMYYYY>_деньги.md` (без `_v2`) | `<Имя>_<DDMMYYYY>_деньги.pdf` |
+| ДНК неземной любви (код 44) | `love` | `<Имя>_<DDMMYYYY>_любовь.md` | `<Имя>_<DDMMYYYY>_любовь.pdf` |
 
 Оркестратор и `deliver_mission.py` различают продукты по обязательному флагу `--product`. Источник истины для выбора — колонка D Google Sheet «Покупки»:
 - «Анализ миссии звёздной души» → `--product mission`
 - «Архитектура Денег — код 50.56» → `--product money_dna`
+- «ДНК неземной любви — код 44» → `--product love`
 
 ## Архитектура
 
@@ -56,10 +58,10 @@
 
 | Скрипт | Расположение | Назначение |
 |---|---|---|
-| `pull_client.py` | `.cursor/skills/1-download/` | Скачать папки клиентов с Drive (поддерживает `--product mission\|money_dna`) |
+| `pull_client.py` | `.cursor/skills/1-download/` | Скачать папки клиентов с Drive (поддерживает `--product mission\|money_dna\|love`) |
 | `money_validate.py` | `.cursor/skills/2-money-analysis/` | Жёсткий гейт-валидатор разбора ДНК денег (проверки A–W). Запуск обязателен перед показом Дарье. |
 | `generate_pdf.py` | `.cursor/skills/5-pdf/` | MD → стилизованный PDF |
-| `deliver_mission.py` | `.cursor/skills/6-delivery/` | Доставка в кабинет. Флаг `--product mission\|money_dna` **обязателен**. |
+| `deliver_mission.py` | `.cursor/skills/6-delivery/` | Доставка в кабинет. Флаг `--product mission\|money_dna\|love` **обязателен**. |
 
 ### Правила анализа денег — компаньоны скиллов
 
@@ -93,19 +95,33 @@ python3 .cursor/skills/6-delivery/deliver_mission.py --product mission --yes \
 # Архитектура Денег
 python3 .cursor/skills/6-delivery/deliver_mission.py --product money_dna --yes \
   client@example.com "Профайлы клиентов/Имя_contract_дата"
+
+# ДНК неземной любви
+python3 .cursor/skills/6-delivery/deliver_mission.py --product love --yes \
+  client@example.com "Профайлы клиентов/Имя_contract_дата"
 ```
 
-Если флаг `--product` не передан — скрипт остановится с подсказкой. Это защита от тихого затирания не того продукта, когда у клиента в Sheet есть и миссия, и деньги.
+Для любви оператор всегда пишет `--product love`. Внутри ЛК воркер хранит этот продукт как `productCode: love_dna`, а фронт `/me` читает массив `loveDnas`.
+
+Перед отправкой любви в ЛК в папке клиента должны лежать:
+- `*_любовь.pdf` — готовый PDF любви;
+- `*_любовь.md` — исходный разбор любви;
+- `summary_love.md` — отдельное резюме для inline-preview, не `summary.md`;
+- `Generated_image_love.png` или PNG с «любовь» в имени — отдельная обложка любви. Скрипт специально не берёт обычный `Generated_image.png`, чтобы не подменить денежную или миссийную картинку.
+
+Если флаг `--product` не передан — скрипт остановится с подсказкой. Это защита от тихого затирания не того продукта, когда у клиента в Sheet есть несколько покупок.
 
 Дополнительно скрипт сам решает префикс файлов и R2-ключей по `--product`:
 
-| Артефакт | mission | money_dna |
-|---|---|---|
-| PDF в папке клиента (вход) | `*_миссия.pdf` | `*_деньги.pdf` |
-| Имя PDF на GDrive | `mission_<slug>_<ts>.pdf` | `money_dna_<slug>_<ts>.pdf` |
-| Имя PNG cover на GDrive | `mission_<slug>_<ts>_cover.png` | `money_dna_<slug>_<ts>_cover.png` |
-| Ключ cover.webp в R2 | `mission/<contractShort>/cover.webp` | `money_dna/<contractShort>/cover.webp` |
-| Ключ summary.html в R2 | `mission/<contractShort>/summary.html` | `money_dna/<contractShort>/summary.html` |
+| Артефакт | mission | money_dna | love |
+|---|---|---|---|
+| PDF в папке клиента (вход) | `*_миссия.pdf` | `*_деньги.pdf` | `*_любовь.pdf` |
+| Summary для inline-preview | `summary.md` | `summary.md` | `summary_love.md` |
+| Обложка | `Generated_image.png` | `Generated_image.png` | `Generated_image_love.png` или `*любов*.png` |
+| Имя PDF на GDrive | `mission_<slug>_<ts>.pdf` | `money_dna_<slug>_<ts>.pdf` | `love_dna_<slug>_<ts>.pdf` |
+| Имя PNG cover на GDrive | `mission_<slug>_<ts>_cover.png` | `money_dna_<slug>_<ts>_cover.png` | `love_dna_<slug>_<ts>_cover.png` |
+| Ключ cover.webp в R2 | `mission/<contractShort>/cover.webp` | `money_dna/<contractShort>/cover.webp` | `love_dna/<contractShort>/cover.webp` |
+| Ключ summary.html в R2 | `mission/<contractShort>/summary.html` | `money_dna/<contractShort>/summary.html` | `love_dna/<contractShort>/summary.html` |
 
 Воркер хранит финальные `coverKey`/`summaryKey` в KV `missions:<email>` и при отдаче в кабинет читает их как есть — префикс продукта для воркера прозрачен.
 
@@ -126,7 +142,7 @@ D:\DariaGalactic\Профайлы клиентов\.git\
 
 ## Конфиг
 
-`DariaGalactic/config/` — `.env`, `gdrive_token.json`, `client_secret_*.json`, `cabinet_sheet_token.json`.
+`config/` внутри папки скиллов — `.env`, `gdrive_token.json`, `client_secret_*.json`, `cabinet_sheet_token.json`.
 
 Если папка конфигов удалена или машина новая, runtime-креды восстанавливаются из приватного репозитория `https://github.com/ResearcherryAI/Intergalacticcreds.git`. Для `pull_client.py` и `deliver_mission.py` копировать только релевантные файлы:
 - `.env`
