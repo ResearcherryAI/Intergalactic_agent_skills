@@ -395,23 +395,16 @@ def check_dispositors(sections):
         add("FAIL", f"A. Раху/Кету: {'; '.join(miss)} — добавить расшифровку диспозиторов с конкретикой.")
 
 
-# ── B. Флагман-профессия перед 11 сферами ───────────────────────────
+# ── B. Флагман-профессия ОТМЕНЕНА (09.06.2026) ─────────────────────
 def check_flagship(text):
     block = get_spheres_block(text)
     if not block:
-        return  # отсутствие раздела ловит check_spheres
-    m = re.search(r"профессия,?\s+(?:в которой|объединяющ)", block, flags=re.IGNORECASE)
-    if not m:
-        add("FAIL", "B. Нет объединяющей флагман-профессии («**Профессия, в которой всё сходится…**») в конце блока 11 сфер.")
         return
-    # флагман-профессия должна стоять ПОСЛЕ 11-й сферы (как итог, в конце блока)
-    last_sphere = None
-    for sm in re.finditer(r"^\s*11\.\s+\*\*", block, flags=re.MULTILINE):
-        last_sphere = sm.start()
-    if last_sphere is not None and m.start() > last_sphere:
-        add("PASS", "B. Флагман-профессия стоит в конце 11 сфер (итог-вишенка).")
+    m = re.search(r"профессия,?\s+в\s+которой\s+всё\s+сходится", block, flags=re.IGNORECASE)
+    if m:
+        add("FAIL", "B. Строка «Профессия, в которой всё сходится» найдена — она ОТМЕНЕНА (09.06.2026), убрать.")
     else:
-        add("FAIL", "B. Флагман-профессия должна стоять в КОНЦЕ 11 сфер (после 11-й сферы), а не в начале.")
+        add("PASS", "B. Флагман-профессия отсутствует (правильно — отменена 09.06.2026).")
 
 
 # ── C. Три пласта в 11 сферах ───────────────────────────────────────
@@ -520,26 +513,49 @@ def check_cliches(text):
         add("PASS", "H. Штампов-повторов из других разборов не обнаружено.")
 
 
-# ── I. Флагман-профессия не дублирует текст сферы 11 дословно ──────
+# ── I. [ОТМЕНЕНО] Флагман-профессия убрана — проверка I теперь = PASS ──
 def check_flagship_not_duplicate(text):
+    add("PASS", "I. [Отменено] Флагман-профессия убрана (09.06.2026).")
+
+
+# ── X. Лагнеш (управитель Асцендента) описан в разделе АСЦЕНДЕНТ ───
+def check_lagnesh(sections):
+    _, body = find_section(sections, "АСЦЕНДЕНТ")
+    if not body:
+        return
+    lagnesh_pat = re.compile(r"(управител|лагнеш|управляет.*асцендент)", flags=re.IGNORECASE)
+    if lagnesh_pat.search(body):
+        add("PASS", "X. Лагнеш (управитель Асцендента) описан в разделе АСЦЕНДЕНТ.")
+    else:
+        add("FAIL", "X. В разделе АСЦЕНДЕНТ не описан лагнеш (управитель Асцендента) — обязательно указать планету-управителя, её дом, знак, накшатру и денежный смысл.")
+
+
+# ── Y. Фильтр оснований для 11 сфер ───────────────────────────────
+def check_sphere_basis(text, path):
+    """WARN если в 11 сферах упоминается Меркурий как основание
+    без привязки к H2/H11/управлению H2/H11."""
     block = get_spheres_block(text)
     if not block:
         return
-    m11 = re.search(r"(?:^|\n)\s*11\.\s+\*\*(.+?)(?=\n\s*\*\*Профессия|$)", block, flags=re.DOTALL)
-    flagship = re.search(r"\*\*Профессия,?\s+в которой[^*]+\*\*(.+?)(?=\n---|\n##|\Z)", block, flags=re.DOTALL)
-    if not m11 or not flagship:
+    mercury_mentions = len(re.findall(r"меркурий", block, flags=re.IGNORECASE))
+    if mercury_mentions == 0:
+        add("PASS", "Y. Меркурий не используется как основание для сфер.")
         return
-    s11_text = m11.group(1).strip()[:300]
-    fl_text = flagship.group(1).strip()[:300]
-    fl_words = set(re.findall(r'\w{4,}', fl_text.lower()))
-    s11_words = set(re.findall(r'\w{4,}', s11_text.lower()))
-    if not fl_words:
+    rows = _parse_csv_rows(path)
+    if not rows:
+        add("WARN", f"Y. Меркурий упоминается {mercury_mentions} раз(а) в 11 сферах — нет CSV для проверки.")
         return
-    overlap = len(fl_words & s11_words) / len(fl_words)
-    if overlap > 0.6:
-        add("FAIL", f"I. Флагман-профессия дублирует сферу 11 ({overlap:.0%} совпадение слов) — переписать уникальным синтезом.")
+    mercury_in_h2_h11 = False
+    for cols in rows:
+        planet = cols[0].strip().lower()
+        house = cols[3].strip() if len(cols) > 3 else ""
+        if "меркурий" in planet and house in ("2", "11"):
+            mercury_in_h2_h11 = True
+            break
+    if mercury_in_h2_h11:
+        add("PASS", f"Y. Меркурий в H2/H11 — допустим как основание для сфер ({mercury_mentions} упоминаний).")
     else:
-        add("PASS", "I. Флагман-профессия не дублирует сферу 11.")
+        add("WARN", f"Y. Меркурий упоминается {mercury_mentions} раз(а) в 11 сферах, но НЕ стоит в H2/H11. Проверить: является ли он управителем H2/H11 или стоит в связке с финансовым показателем? Если нет — убрать из оснований сфер.")
 
 
 # ── J. Выдуманные слова и неверные термины (причина 1) ──────────────
@@ -1020,6 +1036,8 @@ def main():
     check_energodush_meaning(text)           # U
     check_profession_density(text)           # V (WARN)
     check_interconnections(text, path)       # W
+    check_lagnesh(sections)                  # X
+    check_sphere_basis(text, path)           # Y
 
     print("=" * 60)
     print(f"ВАЛИДАЦИЯ: {path}")
