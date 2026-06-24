@@ -273,7 +273,7 @@ cover: Generated_image.png
 | Ошибка | Причина | Решение |
 |---|---|---|
 | `СТОП: для этого email нет строки…` | Email не найден | Перечитать Sheet |
-| 401 Unauthorized | Протух токен | Удалить `gdrive_token.json`, перезапустить |
+| 401 Unauthorized | Протух access token или токен не из общей связки | Обновить `токены/gdrive_token.json` через общий OAuth client `390430088955-...` и аккаунт `interviewkotilev@gmail.com`, scope `drive` |
 | R2 upload failed | R2 token / bucket | Проверить `токены/.env`; deploy-токен воркеров сюда не класть |
 | Worker POST failed | Worker недоступен | Проверить `WORKER_URL` |
 | `отсутствует frontmatter` | Формат `summary.md` | Пересобрать по контракту выше |

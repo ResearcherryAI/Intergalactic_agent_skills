@@ -175,7 +175,7 @@ python .cursor/skills/2-analysis/make_v2.py "<папка_клиента>"
 
 ## Синхронизация с Google Sheet (ШАГ 0)
 
-**Google Sheet:** `https://docs.google.com/spreadsheets/d/1X2voXTHnywDHXk1BRVNsYktrL8MtXHqxl6jhwymLzWE/edit?gid=613125444`
+**Google Sheet:** `https://docs.google.com/spreadsheets/d/1Q16I7RlpDC-7tGw6uBMvPbVjBFZ2iZ0sHJx-KJM6p6A/edit?gid=613125444`
 
 1. Прочитать таблицу (через WebFetch или MCP GDrive)
 2. Найти ВСЕ строки со статусом **«В разборе у Дарьи»** (колонка H)

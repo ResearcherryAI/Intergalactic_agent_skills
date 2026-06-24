@@ -15,7 +15,7 @@
 
 Единая Google-таблица «Учёт покупок и разборов» в папке **Разборы**:
 
-[Открыть лист](https://docs.google.com/spreadsheets/d/1X2voXTHnywDHXk1BRVNsYktrL8MtXHqxl6jhwymLzWE/edit)
+[Открыть лист](https://docs.google.com/spreadsheets/d/1Q16I7RlpDC-7tGw6uBMvPbVjBFZ2iZ0sHJx-KJM6p6A/edit)
 
 Колонки (текущая схема, после правок мая 2026):
 
@@ -219,8 +219,8 @@ LavaTop API). Если статус не меняется — пиши Кири�
 runtime-секрет и обнови `токены/.env`.
 
 **Скрипт упал на загрузке в Drive** — проверь, что файл существует,
-интернет работает, и `gdrive_token.json` не повреждён (можно удалить и
-переавторизоваться заново — браузер откроется автоматически).
+интернет работает, а `gdrive_token.json` выписан на общий OAuth client,
+аккаунт `interviewkotilev@gmail.com` и полный scope `drive`.
 
 **Хочешь руками поменять статус** — открой таблицу и измени колонку G.
 Worker таблицу не перезатирает, он только дополняет.

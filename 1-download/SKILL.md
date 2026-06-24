@@ -114,17 +114,16 @@ D:\DariaGalactic\Профайлы клиентов\Купившие разбор
 
 ## Авторизация
 
-- OAuth-токен: `токены/gdrive_token.json` внутри репо скиллов.
+- OAuth-токен: `токены/gdrive_token.json`
 - Если `токены/` пустая или удалена, восстановить runtime-креды из приватного репозитория `https://github.com/ResearcherryAI/Intergalacticcreds.git`: `.env`, `client_secret_*.json`, `gdrive_token.json`, `cabinet_sheet_token.json`.
-- Cloudflare deploy-токены, которые меняют код воркеров, в `токены/` не копировать.
 - Аккаунт: `interviewkotilev@gmail.com`
-- Если 404 при list/download → удалить `gdrive_token.json`, запустить снова, в браузере выбрать правильный аккаунт
+- Если 404 при list/download → проверить, что `gdrive_token.json` выписан на общий OAuth client `390430088955-...`, аккаунт `interviewkotilev@gmail.com`, scope `drive`
 
 ## Обработка ошибок
 
 | Ошибка | Причина | Решение |
 |---|---|---|
-| 404 на list/download | Токен от другого аккаунта | Удалить `gdrive_token.json`, перезапустить |
+| 404 на list/download | Токен от другого аккаунта или другого OAuth client | Обновить `токены/gdrive_token.json` из общей связки Worker/n8n/local |
 | Пустая папка (нет CSV) | Worker ещё не создал карту | `--regen-csv-for <email>` или подождать |
 | `FileNotFoundError: токены/` | Нет секретов | Восстановить runtime-креды в `токены/` |
 

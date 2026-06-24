@@ -595,10 +595,9 @@ def run_single(args):
     except Exception as e:
         sys.exit(
             f'\n!! Не удалось прочитать содержимое Drive-папки: {e}\n'
-            'Скорее всего gdrive_token.json авторизован НЕ на тот аккаунт,\n'
-            'на котором Worker создал папку. Проверьте: Worker работает под\n'
-            f'«interviewkotilev@gmail.com». Удалите {TOKEN_FILE} и\n'
-            'переавторизуйтесь под этим же аккаунтом.'
+            'Проверьте общий токен токены/gdrive_token.json: он должен быть\n'
+            'выписан на interviewkotilev@gmail.com с полным scope drive и\n'
+            'тем же OAuth client, что у Worker/n8n.'
         )
     print(f'→ Скачано: {result["downloaded"]}, пропущено (уже есть): {result["skipped"]}')
     if result['has_ai_report']:
