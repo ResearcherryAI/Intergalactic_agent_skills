@@ -28,6 +28,8 @@ money_validate.py — жёсткий гейт-валидатор разбора 
 Волна калибровки (Дарья, 30.06.2026, клиенты после первых 5):
     Z.  Запрет ЦЕПОЧЕК диспозиторов — только узел → его прямой диспозитор (FAIL)
     AA. Ровно 1 интеграционная сфера в блоке «11 сфер» (FAIL)
+    AB. Ноль латинских букв в теле (кроме URL) (FAIL)
+    AC. Обязательные CTA: книга + миссия + тотальная + сопровождение; без Энергодуша (FAIL)
 """
 import re
 import sys
@@ -118,8 +120,10 @@ FORMAT_SPHERES_CAP = 3     # сколько из 11 сфер могут каса
 
 # Услуги-ссылки для проверки «1 услуга на раздел» (WhatsApp-CTA не услуга).
 SERVICE_ANCHORS = [
-    "cleansing-202", "consultation-508", "/book/", "#mission", "mentorship-6130",
+    "consultation-508", "/book/", "#mission", "mentorship-6130", "year-forecast",
 ]
+# Энергодуш убран из каталога 01.07.2026 — если всплывёт, FAIL.
+FORBIDDEN_SERVICE_ANCHORS = ["cleansing-202", "about.html"]
 
 # Белый список цивилизаций/точек (дополняет имена из CSV клиента).
 CIV_ALLOW = {
@@ -186,6 +190,21 @@ def check_latin_in_cyrillic(text):
         add("FAIL", f"Латиница внутри кириллицы: {', '.join(sorted(set(bad))[:10])}")
     else:
         add("PASS", "Нет смешанных кириллица+латиница слов.")
+
+
+def check_no_latin_body(text):
+    """AB. В теле разбора — ноль латинских букв вне URL (Артём, 10.07.2026)."""
+    body = re.sub(r"https?://\S+", " ", text)
+    # убрать markdown code если есть
+    body = re.sub(r"`[^`]+`", " ", body)
+    letters = re.findall(r"[A-Za-z]+", body)
+    # допустимые единицы: одиночные обозначения аспектов уже вырезаны; проценты/градусы без букв
+    # разрешить редкие астро-аббревиатуры? НЕТ — по указанию Дарьи «вообще никогда»
+    if letters:
+        uniq = sorted(set(letters), key=str.lower)[:15]
+        add("FAIL", f"AB. Латиница в теле ({len(letters)} слов): {', '.join(uniq)} — заменить на русский; латиница только в URL.")
+    else:
+        add("PASS", "AB. В теле нет латинских букв (кроме URL).")
 
 
 def get_h2_sections(text):
@@ -276,42 +295,47 @@ def check_practices(text):
 
 
 def check_links(text):
-    services = {
-        "Энергодуш": "cleansing-202",
-        "Консультация": "consultation-508",
+    """AC. Каталог услуг после 01.07.2026 + обязательная миссия (волна 09–10.07)."""
+    required = {
         "Книга": "/book/",
         "Миссия": "#mission",
+        "Тотальная консультация": "consultation-508",
         "Сопровождение": "mentorship-6130",
     }
-    found = {name: text.count(anchor) for name, anchor in services.items()}
+    optional = {
+        "Годовой прогноз": "year-forecast",
+    }
+    found = {name: text.count(anchor) for name, anchor in required.items()}
     missing = [n for n, c in found.items() if c == 0]
     dup = [n for n, c in found.items() if c > 1]
-    if not missing and not dup:
-        add("PASS", "Все 5 сервисных ссылок присутствуют по 1 разу.")
+    for name, anchor in optional.items():
+        c = text.count(anchor)
+        if c > 1:
+            dup.append(name)
+    forbidden_hits = []
+    for anchor in FORBIDDEN_SERVICE_ANCHORS:
+        if anchor in text:
+            forbidden_hits.append(anchor)
+    if not missing and not dup and not forbidden_hits:
+        opt_note = ", ".join(f"{n}={'есть' if text.count(a) else 'нет'}" for n, a in optional.items())
+        add("PASS", f"AC. Обязательные CTA на месте по 1 разу ({opt_note}).")
     else:
         msg = ""
         if missing:
             msg += f"отсутствуют: {', '.join(missing)}. "
         if dup:
-            msg += f"дублируются: {', '.join(dup)}."
-        add("FAIL", f"Ссылки: {msg}")
+            msg += f"дублируются: {', '.join(dup)}. "
+        if forbidden_hits:
+            msg += f"запрещённые якоря: {', '.join(forbidden_hits)}."
+        add("FAIL", f"AC. Ссылки: {msg}")
 
 
 def check_energodush_meaning(text):
-    """U. Энергодуш ставится ПО СМЫСЛУ — там, где речь о чистке/чужих
-    программах/поглощении/токсичном, а не прибивается к Сатурну.
-    (Установлено Дарьей 07.06.2026 на разборе Марты.)"""
-    if "cleansing-202" not in text:
-        add("FAIL", "U. Ссылка на Энергодуш не найдена.")
-        return
-    for h, b in split_sections(text):
-        if "cleansing-202" not in b:
-            continue
-        if re.search(r"чист|очищ|токсич|чуж\w|поглощ|налип|освобо|програм", b, flags=re.IGNORECASE):
-            add("PASS", "U. Энергодуш стоит по смыслу (чистка/чужое/токсичное/поглощение).")
-        else:
-            add("FAIL", f"U. Энергодуш в разделе «{h.lstrip('# ').strip()[:24]}» не по смыслу — ставить там, где речь о чистке/чужих программах/поглощении, а не «привязывать» к планете.")
-        return
+    """U. Энергодуш УБРАН из каталога 01.07.2026 — в тексте его быть не должно."""
+    if "cleansing-202" in text:
+        add("FAIL", "U. Найдена ссылка на Энергодуш (cleansing-202) — услуга убрана из ДНК денег, удалить.")
+    else:
+        add("PASS", "U. Энергодуша в тексте нет (услуга убрана).")
 
 
 def check_civilizations(text):
@@ -1046,6 +1070,7 @@ def main():
     check_third_person(text_no_quotes)
     check_jargon(text)
     check_latin_in_cyrillic(text)
+    check_no_latin_body(text)            # AB — ноль латиницы в теле (10.07.2026)
     check_order(text)
     check_spheres(text)
     check_practices(text)
