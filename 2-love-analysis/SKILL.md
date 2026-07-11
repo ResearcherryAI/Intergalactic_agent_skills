@@ -244,7 +244,7 @@ description: Создание полного разбора «Алгоритм �
 
 **Л25. Таблицы «напряжение» и «расцвет» по возрастам созревания накшатр (HARD FAIL). Установлено 11.06.2026.**
 
-Источник возрастов: `DariaGalactic/Аналитика/nakshatra_activation_years_polnaia_luna.json` (метод «Школа Полной Луны»). **Маха-даши НЕ использовать** — только накшатрные активации из JSON.
+Источник возрастов: `.cursor/skills/Разборы/nakshatra_activation_years_polnaia_luna.json` (метод «Школа Полной Луны»). **Маха-даши НЕ использовать** — только накшатрные активации из JSON.
 
 **Две обязательные таблицы в каждом разборе** (после раздела 10, до «Самый сильный триггер»):
 
@@ -347,7 +347,7 @@ description: Создание полного разбора «Алгоритм �
   - `chunks/AktivatsiyaDNK_*.jsonl` — точные формулировки
   - `DariaGalactic/Аналитика/civilization_compatibility.json` — таблица совместимости
   - `tags/by_star.json`, `tags/by_nakshatra.json` — индексы поиска
-  - `DariaGalactic/Аналитика/nakshatra_activation_years_polnaia_luna.json` — возрасты созревания накшатр (таблицы напряжения и расцвета)
+  - `.cursor/skills/Разборы/nakshatra_activation_years_polnaia_luna.json` — возрасты созревания накшатр (таблицы напряжения и расцвета)
 
 ## ⛔ БЛОКИРУЮЩЕЕ: ВЕРИФИКАЦИЯ ЗНАКА АСЦЕНДЕНТА И УПРАВИТЕЛЯ
 
