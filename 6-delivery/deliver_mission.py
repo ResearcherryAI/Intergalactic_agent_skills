@@ -208,7 +208,7 @@ def lookup_sheet_row_for_mission(sheets, email: str, contract_hint: str = '',
 
     # P = Телефон (WhatsApp). Range расширен до A:P, чтобы вытянуть phone.
     res = sheets.spreadsheets().values().get(
-        spreadsheetId=SHEET_ID, range=f'{SHEET_TAB}!A1:P300',
+        spreadsheetId=SHEET_ID, range=f'{SHEET_TAB}!A1:P500',
     ).execute()
     rows = res.get('values', [])
     candidates = []

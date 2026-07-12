@@ -8,7 +8,7 @@ verify_aspects.py — Верификация аспектов в MD-файле �
     python .cursor/skills/3-validation/verify_aspects.py "путь_к_папке_клиента"
 
 Пример:
-    python .cursor/skills/3-validation/verify_aspects.py "D:\\DariaGalactic\\Профайлы клиентов\\Купившие разбор\\Елена_795784ccc0d7_20260521"
+    python .cursor/skills/3-validation/verify_aspects.py "D:\\Producty\\2_Разборы клиентов\\Купившие разбор\\Елена_795784ccc0d7_20260521"
 
 Выход:
     ✓ Все аспекты верифицированы (N из N)
