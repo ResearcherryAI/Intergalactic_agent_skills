@@ -643,7 +643,8 @@ def notify_worker(payload: dict) -> dict:
 
 # ── Main flows ───────────────────────────────────────────────────────
 def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
-                 product_code: str = 'mission', contract_hint: str = '') -> None:
+                 product_code: str = 'mission', contract_hint: str = '',
+                 force_notify: bool = False) -> None:
     # FIX-28: префикс файлов и R2-ключей зависит от продукта.
     # mission → mission_<slug>_<ts>.pdf, R2 mission/<contract>/...
     # money_dna → money_dna_<slug>_<ts>.pdf, R2 money_dna/<contract>/...
@@ -742,10 +743,11 @@ def deliver_full(email: str, client_dir: Path, auto_yes: bool = False,
         'fileName': pdf_file['name'],
         'driveImageLink': drive_image_link,
         # FIX-31: явно говорим воркеру, какой продукт доставляем.
-        # Без этого при первой доставке money_dna воркер не мог отличить
-        # запись money_dna от mission и пропатчил mission Гастона.
-        'productCode': product_code,
+        # FIX-44c: для love в KV хранится love_dna — иначе ЛК не покажет блок.
+        'productCode': 'love_dna' if product_code == 'love' else product_code,
     }
+    if force_notify:
+        payload['notifyEmail'] = True
     if contract_id:
         payload['contractId'] = contract_id
 
@@ -854,12 +856,16 @@ def main():
     # Это защита от тихого затирания не того продукта, когда у клиента
     # есть и миссия и деньги одновременно.
     product_code = None
+    force_notify = False
     if '--yes' in args:
         auto_yes = True
         args.remove('--yes')
     if '-y' in args:
         auto_yes = True
         args.remove('-y')
+    if '--notify' in args:
+        force_notify = True
+        args.remove('--notify')
     # parse --product=value or --product value
     new_args = []
     skip_next = False
@@ -906,7 +912,7 @@ def main():
         confirm_client_dispatch(email, sheet_info, target.parent, auto_yes)
         deliver_legacy_pdf(email, target, product_code=product_code)
     elif target.is_dir():
-        deliver_full(email, target, auto_yes=auto_yes, product_code=product_code, contract_hint=contract_hint)
+        deliver_full(email, target, auto_yes=auto_yes, product_code=product_code, contract_hint=contract_hint, force_notify=force_notify)
     else:
         sys.exit('Передайте папку клиента или путь к *.pdf.')
 
